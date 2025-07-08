@@ -44,7 +44,7 @@ pub unsafe fn dump_memory_region(addr: usize, size: usize) {
     let start_ptr: *const u32 = addr as *const u32;
     let word_count = size / 4;
 
-    error!("Memory dump from 0x{:08x}:", addr);
+    error!("Memory dump from 0x{addr:08x}:");
 
     for chunk_start in (0..word_count).step_by(8) {
         let mut values = Vec::new();
@@ -52,7 +52,7 @@ pub unsafe fn dump_memory_region(addr: usize, size: usize) {
 
         for i in chunk_start..chunk_end {
             let value = unsafe { *start_ptr.add(i) };
-            values.push(format!("{:08x}", value));
+            values.push(format!("{value:08x}"));
         }
 
         error!("  0x{:08x}: [{}]", addr + chunk_start * 4, values.join(" "));

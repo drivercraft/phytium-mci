@@ -5,14 +5,14 @@ edition = "2024"
 
 [dependencies]
 log = "0.4"
-dma-api = { version = "0.2", features = ["alloc"] }
+dma-api = { version = "0.3", features = ["alloc"] }
 bitflags = "2.8"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 spin = "0.10.0"
 rlsf = "0.2.1"
 
 [dev-dependencies]
-bare-test = "0.4"
+bare-test = "0.4.1"
 pcie = "0.2"
 byte-unit = { version = "5.1.6", default-features = false, features = ["byte"] }
 spin_on = "0.1.1"
@@ -21,7 +21,7 @@ spin_on = "0.1.1"
 bare-test-macros = "0.2"
 
 [features]
-default = ["dma"]
+default = ["pio"]
 dma = []
 pio = []
 

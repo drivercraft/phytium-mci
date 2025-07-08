@@ -13,6 +13,9 @@ pub enum MCIError {
     Busy,
     DmaBufUnalign,
     InvalidTiming,
+    CrcError,
+    InvalidParam,
+    BadMalloc,
 }
 
 impl RegError for MCIError {

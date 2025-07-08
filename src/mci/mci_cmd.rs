@@ -36,7 +36,7 @@ impl MCI {
         Ok(())
     }
 
-    pub(crate) fn cmd_transfer<'a>(&self, cmd_data: &'a MCICommand) -> MCIResult {
+    pub(crate) fn cmd_transfer(&self, cmd_data: &MCICommand) -> MCIResult {
         let mut raw_cmd = MCICmd::empty();
         let reg = self.config.reg();
 
@@ -76,6 +76,7 @@ impl MCI {
         }
 
         raw_cmd |= MCICmd::from_bits_truncate(set_reg32_bits!(cmd_data.cmdidx(), 5, 0));
+
         debug!(
             "============[{}-{}]@0x{:x} begin ============",
             {
@@ -90,6 +91,7 @@ impl MCI {
         );
         debug!("    cmd: 0x{:x}", raw_cmd.bits());
         debug!("    arg: 0x{:x}", cmd_data.cmdarg());
+
         /* enable related interrupt */
         self.interrupt_mask_set(
             MCIInterruptType::GeneralIntr,
@@ -103,23 +105,22 @@ impl MCI {
     }
 
     pub(crate) fn cmd_response_get(&mut self, cmd_data: &mut MCICommand) -> MCIResult {
-        let read = cmd_data.flag().contains(MCICmdFlag::READ_DATA);
         if !self.is_ready {
             error!("device is not yet initialized!!!");
             return Err(MCIError::NotInit);
         }
 
         #[cfg(feature = "pio")]
-        if let Some(data) = cmd_data.get_mut_data() {
-            if read {
-                if MCITransMode::PIO == self.config.trans_mode() {
-                    self.pio_read_data(data)?;
-                }
+        if cmd_data.flag().contains(MCICmdFlag::READ_DATA)
+            && MCITransMode::PIO == self.config.trans_mode()
+        {
+            if let Some(data) = cmd_data.get_mut_data() {
+                self.pio_read_data(data)?;
             }
         }
 
         /* check response of cmd */
-        let flag = cmd_data.flag().clone();
+        let flag = *cmd_data.flag();
         let reg = self.config.reg();
         if flag.contains(MCICmdFlag::EXP_RESP) {
             let response = cmd_data.get_mut_response();
@@ -166,7 +167,6 @@ impl MCI {
             MCIDMACIntEn::INTS_MASK.bits(),
             false,
         );
-        // trace!("cmd send done ...");
 
         self.prev_cmd = cmd_data.cmdidx();
 

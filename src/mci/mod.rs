@@ -21,7 +21,7 @@ pub use mci_cmddata::*;
 pub use mci_config::*;
 pub use mci_timing::*;
 
-use crate::{regs::*, mci_sleep};
+use crate::{mci_sleep, regs::*};
 use constants::*;
 use core::time::Duration;
 use log::*;
@@ -35,6 +35,7 @@ pub struct MCI {
     is_ready: bool,
     prev_cmd: u32, // TODO：这里需要实现成一个实现了Command的enum
     curr_timing: MCITiming,
+    #[allow(dead_code)]
     cur_cmd: Option<MCICommand>,
     #[cfg(feature = "dma")]
     desc_list: FSdifIDmaDescList,
@@ -83,7 +84,7 @@ impl MCI {
         if *config != self.config {
             self.config = config.clone();
         }
-        if let Ok(_) = self.reset() {
+        if self.reset().is_ok() {
             self.is_ready = true;
             info!("Device initialize success !!!");
         }
@@ -126,7 +127,7 @@ impl MCI {
         let cmd_reg = reg.read_reg::<MCICmd>();
         let cur_cmd_index = cmd_reg.index_get();
 
-        info!("Set clk as {}", clk_hz);
+        info!("Set clk as {clk_hz}");
         if cur_cmd_index == Self::SWITCH_VOLTAGE {
             reg_val |= MCICmd::VOLT_SWITCH;
         }
@@ -145,7 +146,7 @@ impl MCI {
             self.clock_set(false);
 
             /* update clock for clock source */
-            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)
             } else {
                 self.private_cmd_send(reg_val, 0)
@@ -167,7 +168,7 @@ impl MCI {
             self.clock_set(true);
 
             /* update clock for clock divider */
-            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
                 self.private_cmd_send(reg_val, 0)?;
@@ -178,7 +179,7 @@ impl MCI {
             /* close bus clock in case target clock is 0 */
             self.clock_set(false);
 
-            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
                 self.private_cmd_send(reg_val, 0)?;
@@ -203,7 +204,7 @@ impl MCI {
 
     /// Reset controller from error state
     pub fn restart(&self) -> MCIResult {
-        if false == self.is_ready {
+        if !self.is_ready {
             error!("Device is not yet initialized!!!");
             return Err(MCIError::NotInit);
         }
@@ -275,7 +276,7 @@ impl MCI {
 
     /// Dump command and data info
     pub fn cmd_info_dump(cmd_data: &MCICommand) {
-        debug!("cmd struct @{:p}", cmd_data);
+        debug!("cmd struct @{cmd_data:p}");
         debug!("   opcode: {}", cmd_data.cmdidx());
         debug!("   arg: 0x{:x}", cmd_data.cmdarg());
         let response = cmd_data.get_response();
@@ -377,7 +378,7 @@ impl MCI {
         let busy_bits = MCIStatus::DATA_BUSY | MCIStatus::DATA_STATE_MC_BUSY;
         let reg = self.config.reg();
         let reg_val = reg.read_reg::<MCIStatus>();
-        if reg_val.contains(busy_bits.clone()) {
+        if reg_val.contains(busy_bits) {
             warn!("Card is busy, waiting ...");
         }
         if let Err(err) = reg.retry_for(

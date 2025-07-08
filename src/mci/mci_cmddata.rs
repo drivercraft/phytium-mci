@@ -1,7 +1,6 @@
 use super::constants::*;
 use super::mci_data::MCIData;
 
-#[derive(Debug, Clone)]
 pub struct MCICommand {
     cmdidx: u32,
     cmdarg: u32,

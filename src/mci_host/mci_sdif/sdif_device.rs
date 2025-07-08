@@ -7,68 +7,27 @@ use crate::mci_host::{
     sd::constants::SdCmd,
 };
 
-use crate::osa::osa_alloc_aligned;
-use crate::osa::pool_buffer::PoolBuffer;
-use crate::sd::constants::SD_BLOCK_SIZE;
-
 use crate::mci_sleep;
 use crate::tools::swap_half_word_byte_sequence_u32;
 use alloc::vec::Vec;
-use core::{
-    cell::{Cell, RefCell},
-    mem::take,
-    ptr::NonNull,
-    time::Duration,
-};
+use core::{cell::RefCell, ptr::NonNull, time::Duration};
+use dma_api::Direction;
 use log::*;
-
-#[cfg(feature = "dma")]
-use crate::mci::mci_dma::FSdifIDmaDesc;
-
-#[cfg(feature = "dma")]
-use dma_api::DSlice;
 
 pub(crate) struct SDIFDev {
     hc: RefCell<MCI>, // SDIF 硬件控制器
-    #[cfg(feature = "dma")]
-    rw_desc: PoolBuffer, // DMA 描述符指针，用于管理数据传输 TODO：考虑直接用vec或DVec保存
-    #[cfg(feature = "dma")]
-    max_desc_num: Cell<u32>, // 描述符数量，表示 DMA 描述符的数量
 }
 
 impl SDIFDev {
-    pub fn new(addr: NonNull<u8>, desc_num: usize) -> Self {
-        #[cfg(feature = "dma")]
-        let rw_desc = {
-            let align = SD_BLOCK_SIZE;
-            let length = core::mem::size_of::<FSdifIDmaDesc>() * desc_num;
-            match osa_alloc_aligned(length, align) {
-                Err(e) => {
-                    error!("alloc internal buffer failed! err: {:?}", e);
-                    panic!("Failed to allocate internal buffer");
-                }
-                Ok(buffer) => buffer,
-            }
-        };
-
+    pub fn new(addr: NonNull<u8>) -> Self {
         Self {
             hc: MCI::new(MCIConfig::new(addr)).into(),
-            #[cfg(feature = "dma")]
-            rw_desc,
-            #[cfg(feature = "dma")]
-            max_desc_num: (desc_num as u32).into(),
         }
     }
 }
 
 impl MCIHostDevice for SDIFDev {
     fn init(&self, addr: NonNull<u8>, host: &MCIHost) -> MCIHostStatus {
-        #[cfg(feature = "dma")]
-        {
-            let num_of_desc = host.config.max_trans_size / host.config.def_block_size;
-            self.max_desc_num.set(num_of_desc as u32);
-        }
-        
         self.do_init(addr, host)
     }
 
@@ -82,7 +41,7 @@ impl MCIHostDevice for SDIFDev {
             .restart()
             .unwrap_or_else(|e| error!("restart failed: {:?}", e));
 
-        if let Err(_) = self.hc.borrow_mut().config_init(&mci_config) {
+        if self.hc.borrow_mut().config_init(&mci_config).is_err() {
             info!("Sdio ctrl init failed.");
             return Err(MCIHostError::Fail);
         }
@@ -93,11 +52,7 @@ impl MCIHostDevice for SDIFDev {
 
         #[cfg(feature = "dma")]
         {
-            if let Err(_) = self
-                .hc
-                .borrow_mut()
-                .set_idma_list(&self.rw_desc, self.max_desc_num.get())
-            {
+            if self.hc.borrow_mut().init_dma().is_err() {
                 error!("idma list set failed!");
                 return Err(MCIHostError::Fail);
             }
@@ -175,25 +130,13 @@ impl MCIHostDevice for SDIFDev {
         format: MCIHostDataPacketFormat,
         host: &MCIHost,
     ) -> MCIHostStatus {
-        if host.config.endian_mode == MCIHostEndianMode::Little
-            && format == MCIHostDataPacketFormat::MSBFirst
-        {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = val.swap_bytes();
-            }
-        } else if host.config.endian_mode == MCIHostEndianMode::HalfWordBig {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = swap_half_word_byte_sequence_u32(val);
-            }
-        } else if host.config.endian_mode == MCIHostEndianMode::Big
-            && format == MCIHostDataPacketFormat::LSBFirst
-        {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = val.swap_bytes();
-            }
+        for val in data.iter_mut().take(word_size) {
+            *val = match (host.config.endian_mode, format) {
+                (MCIHostEndianMode::Little, MCIHostDataPacketFormat::MSBFirst)
+                | (MCIHostEndianMode::Big, MCIHostDataPacketFormat::LSBFirst) => val.swap_bytes(),
+                (MCIHostEndianMode::HalfWordBig, _) => swap_half_word_byte_sequence_u32(*val),
+                _ => *val,
+            };
         }
         Ok(())
     }
@@ -373,14 +316,29 @@ impl MCIHostDevice for SDIFDev {
 
             flag |= MCICmdFlag::EXP_DATA;
 
-            let buf = if let Some(rx_data) = in_data.rx_data_mut() {
+            #[cfg(feature = "pio")]
+            let (buf, _direction) = if let Some(rx_data) = in_data.rx_data_take() {
                 // Handle receive data
                 flag |= MCICmdFlag::READ_DATA;
-                take(rx_data)
-            } else if let Some(tx_data) = in_data.tx_data_mut() {
+                (rx_data, Direction::FromDevice)
+            } else if let Some(tx_data) = in_data.tx_data_take() {
                 // Handle transmit data
                 flag |= MCICmdFlag::WRITE_DATA;
-                take(tx_data)
+                (tx_data, Direction::ToDevice)
+            } else {
+                // Neither rx_data nor tx_data is available
+                panic!("Transaction data initialized but contains neither rx_data nor tx_data");
+            };
+
+            #[cfg(feature = "dma")]
+            let (buf, _direction) = if let Some(rx_data) = in_data.rx_data_take() {
+                // Handle receive data
+                flag |= MCICmdFlag::READ_DATA;
+                (rx_data, Direction::FromDevice)
+            } else if let Some(tx_data) = in_data.tx_data_take() {
+                // Handle transmit data
+                flag |= MCICmdFlag::WRITE_DATA;
+                (tx_data, Direction::ToDevice)
             } else {
                 // Neither rx_data nor tx_data is available
                 panic!("Transaction data initialized but contains neither rx_data nor tx_data");
@@ -392,20 +350,25 @@ impl MCIHostDevice for SDIFDev {
 
             #[cfg(feature = "dma")]
             {
-                let slice = DSlice::from(&buf[..]);
-                out_data.buf_dma_set(slice.bus_addr() as usize);
-                drop(slice);
+                out_data.buf_dma_set(Some(buf));
+                debug!(
+                    "buf PA: 0x{:x}, blksz: {}, datalen: {}",
+                    out_data.buf_dma().unwrap().bus_addr(),
+                    out_data.blksz(),
+                    out_data.datalen()
+                );
             }
 
-            out_data.buf_set(Some(buf));
-
-            #[cfg(feature = "dma")]
-            debug!(
-                "buf PA: 0x{:x}, blksz: {}, datalen: {}",
-                out_data.buf_dma(),
-                out_data.blksz(),
-                out_data.datalen()
-            );
+            #[cfg(feature = "pio")]
+            {
+                out_data.buf_set(Some(buf));
+                debug!(
+                    "buf PA: 0x{:x?}, blksz: {}, datalen: {}",
+                    out_data.buf().unwrap().as_ptr() as usize,
+                    out_data.blksz(),
+                    out_data.datalen()
+                );
+            }
 
             Some(out_data)
         } else {
@@ -435,7 +398,7 @@ impl MCIHostDevice for SDIFDev {
 
         let transfer_type = match (is_read_transfer, is_write_transfer) {
             (true, false) => "READ",
-            (false, true) => "WRITE", 
+            (false, true) => "WRITE",
             (true, true) => "READ_WRITE",
             (false, false) => "NO_DATA",
         };
@@ -480,7 +443,8 @@ impl MCIHostDevice for SDIFDev {
             return Err(MCIHostError::Timeout);
         }
 
-        // TODO: 这里的CLONE 会降低驱动速度,需要解决这个性能问题 可能Take出来直接用更好
+        // TODO: 这里的 CLONE 会降低驱动速度,需要解决这个性能问题 可能Take出来直接用更好
+        #[cfg(feature = "pio")]
         if let Some(_) = content.data() {
             let data = cmd_data.get_data().unwrap();
             unsafe {
@@ -491,8 +455,23 @@ impl MCIHostDevice for SDIFDev {
             }
             if let Some(rx_data) = data.buf() {
                 if let Some(in_data) = content.data_mut() {
-                    error!("Transfer data size: {:x?}", rx_data);
                     in_data.rx_data_set(Some(rx_data.clone()));
+                }
+            }
+        }
+
+        #[cfg(feature = "dma")]
+        if let Some(_) = content.data() {
+            let data = cmd_data.get_mut_data().unwrap();
+            unsafe {
+                invalidate(
+                    data.buf_dma().unwrap().as_ptr() as *const u8,
+                    data.buf_dma().unwrap().len() * 4,
+                );
+            }
+            if let Some(rx_data) = data.take_buf_dma() {
+                if let Some(in_data) = content.data_mut() {
+                    in_data.rx_data_set(Some(rx_data));
                 }
             }
         }

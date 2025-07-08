@@ -95,7 +95,7 @@ impl MCI {
             |reg: MCICtrl| !reg.contains(reset_bits),
             Some(RETRIES_TIMEOUT),
         ) {
-            error!("Reset failed, bits = 0x{:x}", reset_bits);
+            error!("Reset failed, bits = 0x{reset_bits:x}");
             return Err(e);
         }
 
@@ -116,7 +116,7 @@ impl MCI {
                 return Err(e);
             }
         }
-        
+
         Ok(())
     }
 

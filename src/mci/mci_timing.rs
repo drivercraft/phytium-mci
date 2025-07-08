@@ -7,6 +7,12 @@ pub struct MCITiming {
     pad_delay: MCIPadDelay, //* 用于调整IO的延时 */
 }
 
+impl Default for MCITiming {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MCITiming {
     pub fn new() -> Self {
         MCITiming {

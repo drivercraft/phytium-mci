@@ -10,7 +10,7 @@ use log::*;
 impl MCI {
     pub(crate) fn pio_write_data(&self, data: &MCIData) -> MCIResult {
         let reg = self.config.reg();
-        let wr_times: usize = (data.datalen() / 4) as usize; /* u8 --> u32 */
+        let wr_times = (data.datalen() / 4) as usize; /* u8 --> u32 */
         let buf = if let Some(buf) = data.buf() {
             buf
         } else {
@@ -19,8 +19,8 @@ impl MCI {
 
         /* write fifo data */
         reg.write_reg(MCICmd::DAT_WRITE);
-        for i in 0..wr_times {
-            reg.write_reg(MCIDataReg::from_bits_truncate(buf[i]));
+        for item in buf.iter().take(wr_times) {
+            reg.write_reg(MCIDataReg::from_bits_truncate(*item));
         }
         Ok(())
     }
@@ -45,7 +45,7 @@ impl MCI {
             return Err(MCIError::NotSupport);
         }
 
-        for _i in 0..rd_times {
+        for _ in 0..rd_times {
             buf.push(reg.read_reg::<MCIDataReg>().bits());
         }
 
@@ -94,7 +94,7 @@ impl MCI {
             }
 
             /* set transfer data length and block size */
-            self.trans_bytes_set(data.datalen() as u32);
+            self.trans_bytes_set(data.datalen());
             self.blksize_set(data.blksz());
 
             /* if need to write, write to fifo before send command */
@@ -106,7 +106,7 @@ impl MCI {
         }
 
         self.cmd_transfer(cmd_data)?;
-        
+
         Ok(())
     }
 
@@ -163,7 +163,7 @@ impl MCI {
                 reg.read_reg::<MCITranFifoCnt>()
             );
         }
-        
+
         /* clear status to ack cmd done */
         self.raw_status_clear();
         Ok(())

@@ -1,6 +1,9 @@
 use super::constants::*;
 use alloc::vec::Vec;
 
+#[cfg(feature = "dma")]
+use dma_api::DVec;
+
 pub(crate) struct MCIHostTransfer {
     data: Option<MCIHostData>,
     cmd: Option<MCIHostCmd>,
@@ -48,8 +51,14 @@ pub(crate) struct MCIHostData {
     data_type: u8,               // 用于区分普通/调谐/启动数据
     block_size: usize,           // 块大小
     block_count: u32,            // 块数量
-    rx_data: Option<Vec<u32>>,   // 用于保存读取数据的缓冲区
-    tx_data: Option<Vec<u32>>,   // 用于写入数据的缓冲区
+    #[cfg(feature = "pio")]
+    rx_data: Option<Vec<u32>>, // 用于保存读取数据的缓冲区
+    #[cfg(feature = "pio")]
+    tx_data: Option<Vec<u32>>, // 用于写入数据的缓冲区
+    #[cfg(feature = "dma")]
+    rx_data: Option<DVec<u32>>, // 用于保存读取数据的缓冲区
+    #[cfg(feature = "dma")]
+    tx_data: Option<DVec<u32>>, // 用于写入数据的缓冲区
 }
 
 #[allow(unused)]
@@ -108,36 +117,96 @@ impl MCIHostData {
         self.block_count = block_count;
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn rx_data(&self) -> Option<&Vec<u32>> {
         self.rx_data.as_ref()
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn rx_data_set(&mut self, rx_data: Option<Vec<u32>>) {
         self.rx_data = rx_data
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn rx_data_mut(&mut self) -> Option<&mut Vec<u32>> {
         self.rx_data.as_mut()
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn rx_data_take(&mut self) -> Option<Vec<u32>> {
         self.rx_data.take()
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn tx_data(&self) -> Option<&Vec<u32>> {
         self.tx_data.as_ref()
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn tx_data_mut(&mut self) -> Option<&mut Vec<u32>> {
         self.tx_data.as_mut()
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn tx_data_set(&mut self, tx_data: Option<Vec<u32>>) {
         self.tx_data = tx_data
     }
 
+    #[cfg(feature = "pio")]
     pub(crate) fn tx_data_take(&mut self) -> Option<Vec<u32>> {
         self.tx_data.take()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn rx_data(&self) -> Option<&DVec<u32>> {
+        self.rx_data.as_ref()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn rx_data_set(&mut self, rx_data: Option<DVec<u32>>) {
+        self.rx_data = rx_data
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn rx_data_mut(&mut self) -> Option<&mut DVec<u32>> {
+        self.rx_data.as_mut()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn rx_data_take(&mut self) -> Option<DVec<u32>> {
+        self.rx_data.take()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn tx_data(&self) -> Option<&DVec<u32>> {
+        self.tx_data.as_ref()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn tx_data_mut(&mut self) -> Option<&mut DVec<u32>> {
+        self.tx_data.as_mut()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn tx_data_set(&mut self, tx_data: Option<DVec<u32>>) {
+        self.tx_data = tx_data
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn tx_data_take(&mut self) -> Option<DVec<u32>> {
+        self.tx_data.take()
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn rx_data_slice(&self) -> Option<Vec<u32>> {
+        let dvec = self.rx_data.as_ref().unwrap();
+        Some((**dvec).to_vec())
+    }
+
+    #[cfg(feature = "dma")]
+    pub(crate) fn tx_data_slice(&self) -> Option<Vec<u32>> {
+        let dvec = self.tx_data.as_ref().unwrap();
+        Some((**dvec).to_vec())
     }
 }
 

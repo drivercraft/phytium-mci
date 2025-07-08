@@ -91,10 +91,10 @@ impl Drop for PoolBuffer {
     }
 }
 
-impl Into<Vec<u32>> for PoolBuffer {
-    fn into(self) -> Vec<u32> {
+impl From<PoolBuffer> for Vec<u32> {
+    fn from(val: PoolBuffer) -> Self {
         unsafe {
-            let slice = from_raw_parts(self.addr.as_ptr() as *const u32, self.size / 4);
+            let slice = from_raw_parts(val.addr.as_ptr() as *const u32, val.size / 4);
             slice.to_vec()
         }
     }

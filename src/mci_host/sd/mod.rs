@@ -20,20 +20,21 @@ use super::{
 };
 
 use crate::mci_host::{MCIHost, mci_host_config::MCIHostType, mci_sdif::sdif_device::SDIFDev};
-use crate::osa::{osa_alloc_aligned, osa_init};
 use crate::mci_sleep;
+use crate::osa::{osa_alloc_aligned, osa_init};
 use crate::tools::swap_word_byte_sequence_u32;
-use alloc::boxed::Box;
-use alloc::rc::Rc;
+use alloc::borrow::ToOwned;
 use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use cid::SdCid;
 use constants::*;
 use core::time::Duration;
 use core::{cmp::max, ptr::NonNull, str};
 use csd::{CsdFlags, SdCardCmdClass, SdCsd};
+#[cfg(feature = "dma")]
+use dma_api::{DVec, Direction};
 use io_voltage::SdIoVoltage;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use scr::{ScrFlags, SdScr};
 use status::SdStatus;
 use usr_param::SdUsrParam;
@@ -65,7 +66,7 @@ impl SdCard {
             mci_host_config.def_block_size,
         ) {
             Err(e) => {
-                error!("alloc internal buffer failed! err: {:?}", e);
+                error!("alloc internal buffer failed! err: {e:?}");
                 panic!("Failed to allocate internal buffer");
             }
             Ok(buffer) => buffer,
@@ -78,8 +79,7 @@ impl SdCard {
         );
 
         // 组装 host
-        let max_desc_num = mci_host_config.max_trans_size / mci_host_config.def_block_size;
-        let sdif_device = SDIFDev::new(addr, max_desc_num);
+        let sdif_device = SDIFDev::new(addr);
 
         let host = MCIHost::new(Box::new(sdif_device), mci_host_config);
         let host_type = host.config.host_type;
@@ -99,7 +99,7 @@ impl SdCard {
         }
 
         if let Err(err) = sd_card.init(addr) {
-            error!("Sd Card Init Fail, error = {:?}", err);
+            error!("Sd Card Init Fail, error = {err:?}");
             panic!("Sd Card Init Fail");
         }
 
@@ -226,13 +226,13 @@ impl SdCard {
                 /* start card init process */
                 info!("Start card identification");
                 if let Err(err) = self.card_init() {
-                    warn!("SD card init failed !!! {:?}", err);
+                    warn!("SD card init failed !!! {err:?}");
                     return Err(MCIHostError::CardInitFailed);
                 }
             }
         }
 
-        info!("SD init finished, status = {:?}", status);
+        info!("SD init finished, status = {status:?}");
         status
     }
 
@@ -480,7 +480,7 @@ impl SdCard {
         let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
         if !self.base.is_host_ready {
             if let Err(err) = host.dev.init(addr, host) {
-                info!("SD host driver init failed, error = {:?}", err);
+                info!("SD host driver init failed, error = {err:?}");
                 return Err(MCIHostError::Fail);
             }
         }
@@ -516,18 +516,16 @@ impl SdCard {
             host.dev.card_power_set(enable);
         }
 
-        let power_delay = if enable {
-            if self.usr_param.power_on_delay_ms == 0 {
-                SD_POWER_ON_DELAY_MS
-            } else {
-                self.usr_param.power_on_delay_ms
-            }
+        let (user_delay, default_delay) = if enable {
+            (self.usr_param.power_on_delay_ms, SD_POWER_ON_DELAY_MS)
         } else {
-            if self.usr_param.power_off_delay_ms == 0 {
-                SD_POWER_OFF_DELAY_MS
-            } else {
-                self.usr_param.power_off_delay_ms
-            }
+            (self.usr_param.power_off_delay_ms, SD_POWER_OFF_DELAY_MS)
+        };
+
+        let power_delay = if user_delay == 0 {
+            default_delay
+        } else {
+            user_delay
         };
 
         mci_sleep(Duration::from_millis(power_delay as u64));
@@ -617,7 +615,12 @@ impl SdCard {
         let mut data = MCIHostData::new();
         data.block_size_set(4);
         data.block_count_set(1);
+
+        #[cfg(feature = "pio")]
         let tmp_buf = vec![0; 4];
+        #[cfg(feature = "dma")]
+        let tmp_buf = DVec::<u32>::zeros(4, 0x100, Direction::FromDevice).unwrap();
+
         data.rx_data_set(Some(tmp_buf));
 
         let mut content = MCIHostTransfer::new();
@@ -664,6 +667,7 @@ impl SdCard {
             }
         } else {
             /* card is in UHS_I mode */
+            #[allow(clippy::never_loop)]
             loop {
                 if self.current_timing == SdTimingMode::SDR12DefaultMode {
                     /* if timing not specified, probe card capability from SDR104 mode */
@@ -765,7 +769,7 @@ impl SdCard {
             SdSpecificationVersion::Version2_0 => 3,
             SdSpecificationVersion::Version3_0 => 4,
         };
-        warn!("card version is {}", version);
+        warn!("card version is {version}");
         warn!(
             "card_command_classes is {:b}",
             self.csd.card_command_classes
@@ -814,7 +818,7 @@ impl SdCard {
 
         /* check if function is support */
         if (func_group_info[group as usize] & (1 << (func as u16)) == 0)
-            || (((current_func_status >> (group as u32) * 4) & 0xf) != (func as u32))
+            || ((current_func_status >> ((group as u32) * 4) & 0xf) != (func as u32))
         {
             info!(
                 "\r\nError: function {} in group {} not support\r\n",
@@ -845,7 +849,7 @@ impl SdCard {
         */
         let current_func_status = ((func_status[3] & 0xff) << 8) | (func_status[4] >> 24);
 
-        if ((current_func_status >> (group as u32) * 4) & 0xf) != (func as u32) {
+        if (current_func_status >> ((group as u32) * 4) & 0xf) != (func as u32) {
             info!("\r\nError: switch to function {} failed\r\n", func as u32);
             return Err(MCIHostError::SwitchFailed);
         }
@@ -1097,9 +1101,13 @@ impl SdCard {
 
         data.block_size_set(64);
         data.block_count_set(1);
+
+        #[cfg(feature = "pio")]
         let tmp_buf = vec![0; 64];
+        #[cfg(feature = "dma")]
+        let tmp_buf = DVec::<u32>::zeros(64, 0x100, Direction::FromDevice).unwrap();
+
         data.rx_data_set(Some(tmp_buf));
-        // TODO: 似乎影响性能 DMA 似乎是最好不要往栈上读写的?
 
         let mut content = MCIHostTransfer::new();
 
@@ -1130,7 +1138,13 @@ impl SdCard {
 
         let data = content.data_mut().unwrap();
 
-        data.rx_data_take()
+        #[cfg(feature = "dma")]
+        let rx_data = data.rx_data_slice();
+
+        #[cfg(feature = "pio")]
+        let rx_data = data.rx_data_take();
+
+        rx_data
     }
 
     /// CMD 7
@@ -1214,12 +1228,12 @@ impl SdCard {
 
         let command = content.cmd().unwrap();
         let response = command.response();
-        info!("in csd_send response is: {:x?}", response);
+        info!("in csd_send response is: {response:x?}");
 
         self.base.internal_buffer.clear();
         // self.base.internal_buffer.extend(response.iter().flat_map(|&val| val.to_ne_bytes()));
         if let Err(e) = self.base.internal_buffer.copy_from_slice(response) {
-            error!("copy to PoolBuffer failed! err: {:?}", e);
+            error!("copy to PoolBuffer failed! err: {e:?}");
             return Err(MCIHostError::Fail);
         }
 
@@ -1388,7 +1402,7 @@ impl SdCard {
             })
             || (block_size % 4 != 0)
         {
-            info!(
+            error!(
                 "\r\nError: read with parameter, block size {} is not support\r\n",
                 block_size
             );
@@ -1399,13 +1413,13 @@ impl SdCard {
         if Err(MCIHostError::CardStatusIdle)
             != self.polling_card_status_busy(SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT)
         {
-            info!("Error : read failed with wrong card busy\r\n");
+            error!("Error : read failed with wrong card busy\r\n");
             return Err(MCIHostError::PollingCardIdleFailed);
         }
 
         let mut command = MCIHostCmd::new();
 
-        info!(
+        trace!(
             "read cmd, block_size = {}, block_count = {}",
             block_size, block_count
         );
@@ -1433,7 +1447,12 @@ impl SdCard {
         data.block_count_set(block_count);
 
         let len = block_size * block_count / 4;
+
+        #[cfg(feature = "pio")]
         let tmp_buf = vec![0; len as usize];
+        #[cfg(feature = "dma")]
+        let tmp_buf = DVec::<u32>::zeros(len as usize, 0x100, Direction::FromDevice).unwrap();
+
         data.rx_data_set(Some(tmp_buf));
         data.enable_auto_command12_set(true);
 
@@ -1441,11 +1460,12 @@ impl SdCard {
         context.set_cmd(Some(command));
         context.set_data(Some(data));
 
-        if let Err(err) = self.transfer(&mut context, 3) {
-            return Err(err);
-        }
+        self.transfer(&mut context, 3)?;
 
         let data = context.data_mut().unwrap();
+        #[cfg(feature = "dma")]
+        let rx_data = data.rx_data_slice().unwrap();
+        #[cfg(feature = "pio")]
         let rx_data = data.rx_data().unwrap();
         buffer.clear();
         buffer.extend(rx_data);
@@ -1469,7 +1489,7 @@ impl SdCard {
             .flat_map(|&val| val.to_ne_bytes())
             .collect::<Vec<u8>>();
         if let Err(e) = self.base.internal_buffer.copy_from_slice(&buffer[..]) {
-            error!("copy to PoolBuffer failed! err: {:?}", e);
+            error!("copy to PoolBuffer failed! err: {e:?}");
             return Err(MCIHostError::Fail);
         }
 
@@ -1479,7 +1499,7 @@ impl SdCard {
     /// CMD 24/25
     pub fn write(
         &mut self,
-        buffer: &mut Vec<u32>,
+        buffer: &mut [u32],
         start_block: u32,
         block_size: u32,
         block_count: u32,
@@ -1513,7 +1533,7 @@ impl SdCard {
         command.index_set(if block_count == 1 {
             MCIHostCommonCmd::WriteSingleBlock as u32
         } else {
-            debug!("write multiple blocks! block count {}", block_count);
+            debug!("write multiple blocks! block count {block_count}");
             MCIHostCommonCmd::WriteMultipleBlock as u32
         });
         command.argument_set(if self.flags.contains(SdCardFlag::SupportHighCapacity) {
@@ -1526,8 +1546,12 @@ impl SdCard {
         data.enable_auto_command12_set(false);
         data.block_size_set(block_size as usize);
         data.block_count_set(block_count);
-        // TODO：减少内存开销
-        let tmp_buf = buffer.clone();
+
+        #[cfg(feature = "pio")]
+        let tmp_buf = buffer.to_owned();
+        #[cfg(feature = "dma")]
+        let tmp_buf = DVec::<u32>::from_vec(buffer.to_owned(), Direction::ToDevice);
+
         data.tx_data_set(Some(tmp_buf));
 
         *written_blocks = block_count;
@@ -1544,7 +1568,7 @@ impl SdCard {
             } else if *written_blocks == 0 {
                 return Err(MCIHostError::TransferFailed);
             }
-            debug!("written blocks this time is {}", written_blocks);
+            debug!("written blocks this time is {written_blocks}");
         }
 
         Ok(())
@@ -1698,7 +1722,12 @@ impl SdCard {
 
         data.block_size_set(8);
         data.block_count_set(1);
+
+        #[cfg(feature = "pio")]
         let tmp_buf = vec![0; 8];
+        #[cfg(feature = "dma")]
+        let tmp_buf = DVec::<u32>::zeros(8, 0x100, Direction::FromDevice).unwrap();
+
         data.rx_data_set(Some(tmp_buf));
         // TODO：似乎影响性能 DMA 似乎是最好不要往栈上读写的?
 
@@ -1707,11 +1736,19 @@ impl SdCard {
         content.set_data(Some(data));
 
         if let Err(err) = host.dev.transfer_function(&mut content, host) {
-            info!("\r\nError: send CMD51 failed with host error {:?}\r\n", err);
+            error!("\r\nError: send CMD51 failed with host error {err:?}\r\n");
             return Err(err);
         }
 
+        #[cfg(feature = "pio")]
         let raw_src = content.data_mut().unwrap().rx_data_mut().unwrap();
+
+        #[cfg(feature = "dma")]
+        let raw_src = {
+            let host_data = content.data_mut().unwrap();
+            &mut host_data.rx_data_slice().unwrap()
+        };
+
         info!("in scr_send raw_src is {:b}", raw_src[0]);
 
         /* according to spec. there are two types of Data packet format for SD card
