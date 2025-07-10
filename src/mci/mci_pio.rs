@@ -1,10 +1,7 @@
-use crate::mci::MCICommand;
+use core::time::Duration;
 
-use super::MCI;
-use super::constants::*;
-use super::err::*;
-use super::mci_data::MCIData;
-use super::regs::*;
+use super::{MCI, consts::*, err::*, mci_data::MCIData, regs::*};
+use crate::{mci::MCICommand, mci_sleep};
 use log::*;
 
 impl MCI {
@@ -77,10 +74,15 @@ impl MCI {
         /* wait previous command finished and card not busy */
         self.poll_wait_busy_card()?;
 
+        // clear raw interrupt status
+        self.config
+            .reg()
+            .write_reg(MCIRawInts::from_bits_truncate(0xFFFFE));
+
         /* reset fifo and not use DMA */
+        reg.clear_reg(MCIBusMode::DE);
         reg.clear_reg(MCICtrl::USE_INTERNAL_DMAC);
         self.ctrl_reset(MCICtrl::FIFO_RESET)?;
-        reg.clear_reg(MCIBusMode::DE);
 
         /* transfer data */
         if let Some(data) = cmd_data.get_mut_data() {
@@ -120,17 +122,15 @@ impl MCI {
             return Err(MCIError::NotInit);
         }
 
-        if MCITransMode::PIO != self.config.trans_mode() {
+        if self.config.trans_mode() != MCITransMode::PIO {
             error!("device is not configure in PIO transfer mode.");
             return Err(MCIError::InvalidState);
         }
-
         trace!("wait for PIO cmd to finish ...");
         if let Err(err) = reg.retry_for(
             |reg: MCIRawInts| {
-                let result = reg.contains(MCIRawInts::CMD_BIT);
-                MCI::relax_handler();
-                result
+                mci_sleep(Duration::from_micros(10));
+                reg.contains(MCIRawInts::CMD_BIT)
             },
             Some(RETRIES_TIMEOUT),
         ) {
@@ -145,8 +145,8 @@ impl MCI {
         if cmd_data.get_data().is_some() && read {
             trace!("wait for PIO data to read ...");
             if let Err(err) = reg.retry_for(
-                |reg| {
-                    MCI::relax_handler();
+                |reg: MCIRawInts| {
+                    mci_sleep(Duration::from_micros(10));
                     (MCIRawInts::DTO_BIT & reg).bits() != 0
                 },
                 Some(RETRIES_TIMEOUT),
@@ -164,7 +164,6 @@ impl MCI {
             );
         }
 
-        /* clear status to ack cmd done */
         self.raw_status_clear();
         Ok(())
     }

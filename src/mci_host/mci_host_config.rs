@@ -1,10 +1,8 @@
-#[cfg(all(feature = "dma", feature = "pio"))]
-compile_error!("can't enable feature dma and pio at the same time!");
-
 use super::sd::constants::{SD_BLOCK_SIZE, SD_CLOCK_50MHZ, SD_MAX_RW_BLK};
-use crate::mci::constants::MCIId;
+use crate::mci::consts::MCIId;
 
 #[allow(unused)]
+#[derive(Clone, Copy)]
 pub struct MCIHostConfig {
     pub(crate) host_id: MCIId,             // 主机 ID
     pub(crate) host_type: MCIHostType,     // 主机类型
@@ -22,33 +20,49 @@ pub struct MCIHostConfig {
 
 #[allow(unused)]
 impl MCIHostConfig {
-    #[cfg(feature = "dma")]
-    pub fn new() -> Self {
-        Self {
-            host_id: MCIId::MCI1,
-            host_type: MCIHostType::SDIF,
-            card_type: MCIHostCardType::MicroSD,
-            enable_irq: false, // TODO：后续实现了irq相关会改为true
-            endian_mode: MCIHostEndianMode::Little,
-            max_trans_size: SD_MAX_RW_BLK * SD_BLOCK_SIZE,
-            def_block_size: SD_BLOCK_SIZE,
-            card_clock: SD_CLOCK_50MHZ,
-            is_uhs_card: false, // TODO：需要测试能不能支持UHS模式
-        }
-    }
-
     #[cfg(feature = "pio")]
     pub fn new() -> Self {
+        let enable_irq = if cfg!(feature = "irq") {
+            true
+        } else if cfg!(feature = "poll") {
+            false
+        } else {
+            false // 默认不启用中断
+        };
+
         Self {
             host_id: MCIId::MCI0,
             host_type: MCIHostType::SDIF,
             card_type: MCIHostCardType::MicroSD,
-            enable_irq: false, // TODO：后续实现了irq相关会改为true
+            enable_irq,
             endian_mode: MCIHostEndianMode::Little,
             max_trans_size: SD_MAX_RW_BLK * SD_BLOCK_SIZE,
             def_block_size: SD_BLOCK_SIZE,
             card_clock: SD_CLOCK_50MHZ,
             is_uhs_card: false,
+        }
+    }
+
+    #[cfg(feature = "dma")]
+    pub fn new() -> Self {
+        let enable_irq = if cfg!(feature = "irq") {
+            true
+        } else if cfg!(feature = "poll") {
+            false
+        } else {
+            false // 默认不启用中断
+        };
+
+        Self {
+            host_id: MCIId::MCI1,
+            host_type: MCIHostType::SDIF,
+            card_type: MCIHostCardType::MicroSD,
+            enable_irq,
+            endian_mode: MCIHostEndianMode::Little,
+            max_trans_size: SD_MAX_RW_BLK * SD_BLOCK_SIZE,
+            def_block_size: SD_BLOCK_SIZE,
+            card_clock: SD_CLOCK_50MHZ,
+            is_uhs_card: false, // TODO：需要测试能不能支持UHS模式
         }
     }
 }
@@ -69,6 +83,7 @@ pub(crate) enum MCIHostCardType {
     SDIO,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostEndianMode {
     Big = 0,         /* Big endian mode */

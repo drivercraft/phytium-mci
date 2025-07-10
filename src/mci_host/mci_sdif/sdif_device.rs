@@ -1,6 +1,5 @@
-use super::MCIHost;
-use super::constants::SDStatus;
-use crate::mci::{MCI, MCICommand, MCIConfig, constants::*, mci_data::MCIData, regs::MCIIntMask};
+use super::{MCIHost, consts::SDStatus};
+use crate::mci::{MCI, MCICommand, MCIConfig, consts::*, mci_data::MCIData, regs::MCIIntMask};
 use crate::mci_host::{
     MCIHostCardIntFn, constants::*, err::*, mci_host_card_detect::MCIHostCardDetect,
     mci_host_config::*, mci_host_device::MCIHostDevice, mci_host_transfer::MCIHostTransfer,

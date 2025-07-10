@@ -16,12 +16,12 @@ use super::{
     mci_host_card_detect::MCIHostCardDetect,
     mci_host_config::MCIHostConfig,
     mci_host_transfer::{MCIHostCmd, MCIHostData, MCIHostTransfer},
-    mci_sdif::constants::SDStatus,
+    mci_sdif::consts::SDStatus,
 };
 
 use crate::mci_host::{MCIHost, mci_host_config::MCIHostType, mci_sdif::sdif_device::SDIFDev};
 use crate::mci_sleep;
-use crate::osa::{osa_alloc_aligned, osa_init};
+use crate::osa::{osa_init, pool_buffer::PoolBuffer};
 use crate::tools::swap_word_byte_sequence_u32;
 use alloc::borrow::ToOwned;
 use alloc::vec;
@@ -31,13 +31,14 @@ use constants::*;
 use core::time::Duration;
 use core::{cmp::max, ptr::NonNull, str};
 use csd::{CsdFlags, SdCardCmdClass, SdCsd};
-#[cfg(feature = "dma")]
-use dma_api::{DVec, Direction};
 use io_voltage::SdIoVoltage;
-use log::{debug, error, info, trace, warn};
+use log::*;
 use scr::{ScrFlags, SdScr};
 use status::SdStatus;
 use usr_param::SdUsrParam;
+
+#[cfg(feature = "dma")]
+use dma_api::{DVec, Direction};
 
 pub struct SdCard {
     base: MCICardBase,
@@ -61,16 +62,14 @@ impl SdCard {
 
         let mci_host_config = MCIHostConfig::new();
 
-        let internal_buffer = match osa_alloc_aligned(
+        let internal_buffer = match PoolBuffer::new(
             mci_host_config.max_trans_size,
             mci_host_config.def_block_size,
         ) {
-            Err(e) => {
-                error!("alloc internal buffer failed! err: {e:?}");
-                panic!("Failed to allocate internal buffer");
-            }
+            Err(e) => panic!("Failed to allocate internal buffer, err: {:?}", e),
             Ok(buffer) => buffer,
         };
+
         let base = MCICardBase::from_buffer(internal_buffer);
         info!(
             "Internal buffer@{:p}, length = 0x{:x}",
@@ -587,7 +586,7 @@ impl SdCard {
                 }
             } else {
                 /* Delay 125us to throttle the polling rate */
-                mci_sleep(Duration::from_micros(125));
+                mci_sleep(Duration::from_micros(1));
                 status_timeout_us -= 125;
             }
         }
@@ -876,7 +875,6 @@ impl SdCard {
         let mut block_count_one_time: u32;
 
         while block_left != 0 {
-            // TODO: 如果修正当前的性能问题,则需要考虑对齐问题
             let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
             if block_left > host.max_block_count.get() {
                 block_left -= host.max_block_count.get();
@@ -1410,8 +1408,8 @@ impl SdCard {
         }
 
         /* read command are not allowed while card is programming */
-        if Err(MCIHostError::CardStatusIdle)
-            != self.polling_card_status_busy(SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT)
+        if self.polling_card_status_busy(SD_CARD_ACCESS_WAIT_IDLE_TIMEOUT)
+            != Err(MCIHostError::CardStatusIdle)
         {
             error!("Error : read failed with wrong card busy\r\n");
             return Err(MCIHostError::PollingCardIdleFailed);
@@ -1463,10 +1461,12 @@ impl SdCard {
         self.transfer(&mut context, 3)?;
 
         let data = context.data_mut().unwrap();
+
         #[cfg(feature = "dma")]
         let rx_data = data.rx_data_slice().unwrap();
         #[cfg(feature = "pio")]
         let rx_data = data.rx_data().unwrap();
+
         buffer.clear();
         buffer.extend(rx_data);
 
@@ -1974,11 +1974,11 @@ impl SdCard {
         }
 
         if self.flags.contains(SdCardFlag::SupportSdhc) {
-            info!(" SDHC ");
+            info!("   SDHC ");
         }
 
         if self.flags.contains(SdCardFlag::SupportSdxc) {
-            info!(" SDXC ");
+            info!("   SDXC ");
         }
 
         info!("\r\n");

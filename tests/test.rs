@@ -18,7 +18,7 @@ mod tests {
     use phytium_mci::{sd::SdCard, *};
 
     const SD_START_BLOCK: u32 = 131072;
-    const SD_USE_BLOCK: u32 = 200;
+    const SD_USE_BLOCK: u32 = 4;
     // const SD_BLOCK_SIZE: u32 = 512;
     // const SD_MAX_RW_BLK: u32 = 1024;
 
@@ -66,7 +66,8 @@ mod tests {
         //     assert_eq!(receive_buf[i], buffer[i]);
         // }
 
-        info!("buffer len is {}", receive_buf.len());
+        info!("read {} blocks from SD card", receive_buf.len());
+        info!("buffer is {:?}", receive_buf);
 
         info!("test_work passed\n");
     }

@@ -1,9 +1,6 @@
-//! 注意不应把重名的子模块设为pub
-pub mod constants;
+pub mod consts;
 pub mod err;
 pub mod mci_data;
-#[cfg(feature = "dma")]
-pub mod mci_dma;
 pub mod regs;
 
 mod mci_cmd;
@@ -12,6 +9,9 @@ mod mci_config;
 mod mci_hardware;
 mod mci_irq;
 mod mci_timing;
+
+#[cfg(feature = "dma")]
+mod mci_dma;
 
 #[cfg(feature = "pio")]
 mod mci_pio;
@@ -22,7 +22,7 @@ pub use mci_config::*;
 pub use mci_timing::*;
 
 use crate::{mci_sleep, regs::*};
-use constants::*;
+use consts::*;
 use core::time::Duration;
 use log::*;
 use regs::*;
@@ -44,10 +44,6 @@ pub struct MCI {
 impl MCI {
     const SWITCH_VOLTAGE: u32 = 11;
     const EXT_APP_CMD: u32 = 55;
-
-    pub(crate) fn relax_handler() {
-        mci_sleep(Duration::from_micros(10));
-    }
 
     pub(crate) fn new(config: MCIConfig) -> Self {
         MCI {
@@ -383,9 +379,8 @@ impl MCI {
         }
         if let Err(err) = reg.retry_for(
             |reg: MCIStatus| {
-                let result = !reg.contains(busy_bits);
-                MCI::relax_handler();
-                result
+                mci_sleep(Duration::from_micros(10));
+                !reg.contains(busy_bits)
             },
             Some(RETRIES_TIMEOUT),
         ) {

@@ -1,4 +1,4 @@
-use super::constants::*;
+use super::consts::*;
 use super::mci_data::MCIData;
 
 pub struct MCICommand {

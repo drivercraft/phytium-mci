@@ -1,5 +1,10 @@
 #![no_std]
 
+#[cfg(all(feature = "dma", feature = "pio"))]
+compile_error!("can't enable feature dma and pio at the same time!");
+#[cfg(all(feature = "irq", feature = "poll"))]
+compile_error!("can't enable feature irq and poll at the same time!");
+
 extern crate alloc;
 
 #[macro_use]

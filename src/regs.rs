@@ -1,6 +1,7 @@
 use crate::mci_sleep;
 use bitflags::Flags;
 use core::{marker::PhantomData, ops, ptr::NonNull, time::Duration};
+use log::debug;
 
 /*
  * 为所有的 bitflag! 实现一个 BitsOps trait
@@ -8,7 +9,7 @@ use core::{marker::PhantomData, ops, ptr::NonNull, time::Duration};
  * 原理是所有的 bitflag! 都是一个结构体，而结构体都是实现了 ops::BitOr 等操作的
  * 这时候为实现了 ops::BitOr 的结构体实现一个 BitsOps trait
  * 这样所有的 bitflag! 都可以识别为实现了 BitsOps trait
-*/
+ */
 pub trait BitsOps:
     ops::BitOr<Output = Self>
     + ops::BitAnd<Output = Self>
@@ -76,6 +77,7 @@ impl<E: RegError> Reg<E> {
     pub fn read_32(&self, reg: u32) -> u32 {
         unsafe {
             let ptr = self.addr.add(reg as _);
+            debug!("Reading register 0x{reg:x}");
             ptr.cast().read_volatile()
         }
     }
@@ -83,7 +85,7 @@ impl<E: RegError> Reg<E> {
     pub fn write_32(&self, reg: u32, val: u32) {
         unsafe {
             let ptr = self.addr.add(reg as _);
-            // debug!("Writing 0x{val:x} to register 0x{reg:x}");
+            debug!("Writing 0x{val:x} to register 0x{reg:x}");
             ptr.cast().write_volatile(val);
         }
     }
@@ -129,9 +131,9 @@ impl<E: RegError> Reg<E> {
         Err(E::timeout())
     }
 
-    pub fn retry_for<R: FlagReg, F: Fn(R) -> bool>(
+    pub fn retry_for<R: FlagReg, F: FnMut(R) -> bool>(
         &self,
-        f: F,
+        mut f: F,
         try_count: Option<usize>,
     ) -> Result<(), E> {
         for _ in 0..try_count.unwrap_or(usize::MAX) {

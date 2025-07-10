@@ -1,6 +1,6 @@
 use super::{
     MCIHost, MCIHostCardIntFn, constants::*, err::*, mci_host_card_detect::MCIHostCardDetect,
-    mci_host_transfer::MCIHostTransfer, mci_sdif::constants::SDStatus,
+    mci_host_transfer::MCIHostTransfer, mci_sdif::consts::SDStatus,
 };
 use crate::mci::MCICommand;
 use alloc::vec::Vec;

@@ -1,15 +1,11 @@
+#![allow(unused)]
+
 use alloc::vec::Vec;
-use dma_api::DVec;
-use dma_api::Direction;
+use dma_api::{DVec, Direction};
 use log::*;
 
+use super::{MCI, consts::*, err::*, mci_data::MCIData, regs::*};
 use crate::mci::MCICommand;
-
-use super::MCI;
-use super::constants::*;
-use super::err::*;
-use super::mci_data::MCIData;
-use super::regs::*;
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct FSdifIDmaDesc {

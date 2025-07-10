@@ -16,6 +16,7 @@ pub enum MCIError {
     CrcError,
     InvalidParam,
     BadMalloc,
+    TransferError,
 }
 
 impl RegError for MCIError {

@@ -1,4 +1,10 @@
-use super::{MCI, constants::*, err::*, mci_cmddata::MCICommand, regs::*};
+#[cfg(feature = "pio")]
+use core::time::Duration;
+
+#[cfg(feature = "pio")]
+use crate::mci_sleep;
+
+use super::{MCI, consts::*, err::*, mci_cmddata::MCICommand, regs::*};
 
 use log::*;
 
@@ -143,6 +149,10 @@ impl MCI {
         }
 
         cmd_data.success_set(true); /* cmd / data transfer finished successful */
+
+        #[cfg(feature = "pio")]
+        mci_sleep(Duration::from_micros(50)); // Allow some time for the command to settle
+
         debug!(
             "============[{}-{}]@0x{:x} end ============",
             {
