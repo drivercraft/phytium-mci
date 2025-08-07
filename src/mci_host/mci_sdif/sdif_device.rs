@@ -388,6 +388,7 @@ impl MCIHostDevice for SDIFDev {
         out_trans
     }
 
+    // #[cfg(feature = "poll")]
     fn transfer_function(&self, content: &mut MCIHostTransfer, host: &MCIHost) -> MCIHostStatus {
         self.pre_command(content, host)?;
 
@@ -411,6 +412,7 @@ impl MCIHostDevice for SDIFDev {
                 return Err(MCIHostError::NoData);
             }
 
+            #[cfg(feature = "poll")]
             if let Err(e) = self.hc.borrow_mut().poll_wait_dma_end(&mut cmd_data) {
                 error!("DMA wait failed: {:?}", e);
                 return Err(MCIHostError::NoData);
@@ -424,6 +426,7 @@ impl MCIHostDevice for SDIFDev {
                 return Err(MCIHostError::NoData);
             }
 
+            #[cfg(feature = "poll")]
             if let Err(e) = self.hc.borrow_mut().poll_wait_pio_end(&mut cmd_data) {
                 error!("PIO wait failed: {:?}", e);
                 return Err(MCIHostError::NoData);
@@ -436,6 +439,29 @@ impl MCIHostDevice for SDIFDev {
             cmd_data.cmdarg(),
             cmd_data.flag(),
         );
+
+        #[cfg(feature = "irq")]
+        {
+            use crate::osa::{
+                consts::{
+                    SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS, SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS,
+                },
+                osa_event_clear, osa_event_wait,
+            };
+            let complete_events = if cmd_data.get_data().is_some() {
+                SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS | SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS
+            } else {
+                SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS
+            };
+
+            if osa_event_wait(complete_events, 5000).is_err() {
+                error!("wait command done timeout!");
+                self.hc.borrow().register_dump();
+                return Err(MCIHostError::Timeout);
+            }
+
+            osa_event_clear(complete_events);
+        }
 
         if let Err(_) = self.hc.borrow_mut().cmd_response_get(&mut cmd_data) {
             info!("Transfer cmd and data failed !!!");

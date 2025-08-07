@@ -12,8 +12,7 @@ spin = "0.10.0"
 rlsf = "0.2.1"
 
 [dev-dependencies]
-bare-test = "0.4.1"
-pcie = "0.2"
+bare-test = "0.4"
 byte-unit = { version = "5.1.6", default-features = false, features = ["byte"] }
 spin_on = "0.1.1"
 
@@ -21,7 +20,7 @@ spin_on = "0.1.1"
 bare-test-macros = "0.2"
 
 [features]
-default = ["pio", "poll"]
+default = ["dma", "irq"]
 dma = []
 pio = []
 poll = []

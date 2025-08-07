@@ -1,24 +1,21 @@
 //! An area managed by Tlsf algorithm
-mod consts;
+pub mod consts;
 mod err;
 pub mod pool_buffer;
-pub mod semaphore;
+// pub mod semaphore;
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::boxed::Box;
 use consts::MAX_POOL_SIZE;
 use core::{
     alloc::Layout,
     mem::MaybeUninit,
     ptr::NonNull,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 use err::FMempError;
 use lazy_static::*;
-use log::{error, info};
 use rlsf::Tlsf;
 use spin::Mutex;
-
-use crate::osa::{consts::SDMMC_OSA_EVENT_FLAG_AND, semaphore::Semaphore};
 
 /// Memory menaged by Tlsf pool
 static mut POOL: [MaybeUninit<u8>; MAX_POOL_SIZE] = [MaybeUninit::uninit(); MAX_POOL_SIZE];
@@ -33,6 +30,12 @@ lazy_static! {
     /// Global memory pool manager
     pub static ref GLOBAL_FMEMP: Mutex<Box<FMemp<'static>>> =
         Mutex::new(Box::new(FMemp::new()));
+}
+
+impl<'a> Default for FMemp<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'a> FMemp<'a> {
@@ -93,69 +96,73 @@ pub fn osa_dealloc(addr: NonNull<u8>, size: usize) {
 
 pub struct OSAEvent {
     event_flag: AtomicU32,
-    handle: Semaphore,
+    notification: AtomicBool,
+}
+
+impl Default for OSAEvent {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OSAEvent {
-    pub fn default() -> Self {
+    pub const fn new() -> Self {
         Self {
             event_flag: AtomicU32::new(0),
-            handle: Semaphore::new(0),
+            notification: AtomicBool::new(false),
         }
     }
+
     pub fn osa_event_set(&self, event_type: u32) {
         self.event_flag.fetch_or(event_type, Ordering::SeqCst);
-        self.handle.up();
+        self.notification.store(true, Ordering::Release);
     }
-    pub fn osa_event_wait(
-        &self,
-        event_type: u32,
-        _timeout_ms: u32,
-        event: &mut u32,
-        flags: u32,
-    ) -> Result<(), &'static str> {
-        info!("waiting event");
 
-        self.handle.down();
-        *event = self.osa_event_get();
-        if flags & SDMMC_OSA_EVENT_FLAG_AND != 0 {
-            if *event == event_type {
-                return Ok(());
+    pub fn osa_event_wait(&self, event_type: u32, timeout_ticks: u32) -> Result<u32, &'static str> {
+        let mut ticks = 0;
+
+        loop {
+            if self.notification.load(Ordering::Acquire) {
+                let events = self.event_flag.load(Ordering::SeqCst);
+                if events & event_type != 0 {
+                    self.notification.store(false, Ordering::Release);
+                    return Ok(events);
+                }
             }
-        } else {
-            if *event & event_type != 0 {
-                return Ok(());
+
+            if ticks >= timeout_ticks {
+                return Err("timeout");
             }
+
+            ticks += 1;
+
+            core::hint::spin_loop();
         }
+    }
 
-        error!("event wait failed");
-        Err("event wait failed")
-    }
-    pub fn osa_event_get(&self) -> u32 {
-        self.event_flag.load(Ordering::SeqCst)
-    }
     pub fn osa_event_clear(&self, event_type: u32) {
         self.event_flag.fetch_and(!event_type, Ordering::SeqCst);
+
+        if self.event_flag.load(Ordering::SeqCst) == 0 {
+            self.notification.store(false, Ordering::Release);
+        }
+    }
+
+    pub fn osa_event_get(&self) -> u32 {
+        self.event_flag.load(Ordering::SeqCst)
     }
 }
 
 lazy_static! {
-    /// Global event handler
-    pub static ref OSA_EVENT: Arc<OSAEvent> =
-        Arc::new(OSAEvent::default());
+    static ref OSA_EVENT: OSAEvent = OSAEvent::new();
 }
 
 pub fn osa_event_set(event_type: u32) {
     OSA_EVENT.osa_event_set(event_type);
 }
 
-pub fn osa_event_wait(
-    event_type: u32,
-    _timeout_ms: u32,
-    event: &mut u32,
-    flags: u32,
-) -> Result<(), &'static str> {
-    OSA_EVENT.osa_event_wait(event_type, _timeout_ms, event, flags)
+pub fn osa_event_wait(event_type: u32, timeout_ms: u32) -> Result<(), &'static str> {
+    OSA_EVENT.osa_event_wait(event_type, timeout_ms).map(|_| ())
 }
 
 pub fn osa_event_get() -> u32 {

@@ -5,7 +5,6 @@ use core::time::Duration;
 use crate::mci_sleep;
 
 use super::{MCI, consts::*, err::*, mci_cmddata::MCICommand, regs::*};
-
 use log::*;
 
 impl MCI {
@@ -110,6 +109,7 @@ impl MCI {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn cmd_response_get(&mut self, cmd_data: &mut MCICommand) -> MCIResult {
         if !self.is_ready {
             error!("device is not yet initialized!!!");

@@ -13,20 +13,20 @@ use log::error;
 pub struct PoolBuffer {
     size: usize,
     addr: NonNull<u8>,
-    align: usize,
+    _align: usize,
 }
 
 impl PoolBuffer {
     /// Alloc a PoolBuffer, where size is buffer size in bytes
-    pub fn new(size: usize, align: usize) -> Result<Self, &'static str> {
-        let ptr = match osa_alloc_aligned(size, align) {
+    pub fn new(size: usize, _align: usize) -> Result<Self, &'static str> {
+        let ptr = match osa_alloc_aligned(size, _align) {
             Err(_) => return Err("osa alloc failed!"),
             Ok(ptr) => ptr,
         };
         Ok(Self {
             size,
             addr: ptr,
-            align,
+            _align,
         })
     }
 

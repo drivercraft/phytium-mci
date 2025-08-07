@@ -58,4 +58,5 @@ pub(crate) trait MCIHostDevice {
     fn pre_command(&self, content: &mut MCIHostTransfer, host: &MCIHost) -> MCIHostStatus;
     fn convert_command_info(&self, in_trans: &mut MCIHostTransfer) -> MCICommand;
     fn transfer_function(&self, content: &mut MCIHostTransfer, host: &MCIHost) -> MCIHostStatus;
+    // fn transfer_function_poll(&self, content: &mut MCIHostTransfer, host: &MCIHost) -> MCIHostStatus;
 }

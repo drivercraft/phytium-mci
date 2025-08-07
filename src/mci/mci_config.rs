@@ -29,6 +29,7 @@ impl MCIConfig {
         }
     }
 
+    #[allow(dead_code)]
     fn clear_irq(&self) {
         let raw_ints = self.reg.read_reg::<MCIRawInts>();
         let dmac_status = self.reg.read_reg::<MCIDMACStatus>();

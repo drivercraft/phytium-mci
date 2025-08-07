@@ -1,7 +1,6 @@
 use crate::mci_sleep;
 use bitflags::Flags;
 use core::{marker::PhantomData, ops, ptr::NonNull, time::Duration};
-use log::debug;
 
 /*
  * 为所有的 bitflag! 实现一个 BitsOps trait
@@ -77,7 +76,6 @@ impl<E: RegError> Reg<E> {
     pub fn read_32(&self, reg: u32) -> u32 {
         unsafe {
             let ptr = self.addr.add(reg as _);
-            debug!("Reading register 0x{reg:x}");
             ptr.cast().read_volatile()
         }
     }
@@ -85,7 +83,6 @@ impl<E: RegError> Reg<E> {
     pub fn write_32(&self, reg: u32, val: u32) {
         unsafe {
             let ptr = self.addr.add(reg as _);
-            debug!("Writing 0x{val:x} to register 0x{reg:x}");
             ptr.cast().write_volatile(val);
         }
     }

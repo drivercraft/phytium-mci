@@ -251,7 +251,6 @@ impl MCI {
 
         // transfer command
         self.cmd_transfer(cmd_data)?;
-
         Ok(())
     }
 
@@ -271,6 +270,7 @@ impl MCI {
         self.setup_dma_descriptor(data)?;
 
         let data_len = data.blkcnt() * data.blksz();
+
         debug!(
             "Descriptor count: {}, trans bytes: {}, block size: {}, desc_phys: 0x{:x}, data_phys: 0x{:x}",
             self.desc_list.len(),
@@ -467,9 +467,20 @@ impl MCI {
         loop {
             reg_val = self.config.reg().read_reg::<MCIRawInts>().bits();
 
-            if delay % 100 == 0 {
+            // let dmac_events = self.config.reg().read_reg::<MCIDMACStatus>();
+            // let event_mask = self.config.reg().read_reg::<MCIIntMask>();
+            // let _dmac_evt_mask = self.config.reg().read_reg::<MCIDMACIntEn>();
+
+            // debug!(
+            //     "poll_wait_dma_end: events=0x{:x}, dmac_events=0x{:x}, event_mask={:x}",
+            //     reg_val,
+            //     dmac_events.bits(),
+            //     event_mask.bits()
+            // );
+
+            if delay != 0 {
                 debug!(
-                    "Polling dma end, reg_val = 0x{:x}, delay: {}, wait_bits: {}, result: {}",
+                    "reg_val = 0x{:x}, delay: {}, wait_bits: {}, result: {}",
                     reg_val,
                     delay,
                     wait_bits,
@@ -483,9 +494,6 @@ impl MCI {
 
             delay -= 1;
         }
-
-        /* clear status to ack data done */
-        self.raw_status_clear();
 
         if wait_bits & reg_val != wait_bits && delay == 0 {
             error!("Wait command done timeout, raw ints: 0x{reg_val:x}!");
@@ -501,6 +509,8 @@ impl MCI {
             }
         }
 
+        /* clear status to ack data done */
+        self.raw_status_clear();
         Ok(())
     }
 }

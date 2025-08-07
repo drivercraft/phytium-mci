@@ -24,8 +24,6 @@ impl MCIHostConfig {
     pub fn new() -> Self {
         let enable_irq = if cfg!(feature = "irq") {
             true
-        } else if cfg!(feature = "poll") {
-            false
         } else {
             false // 默认不启用中断
         };
@@ -47,8 +45,6 @@ impl MCIHostConfig {
     pub fn new() -> Self {
         let enable_irq = if cfg!(feature = "irq") {
             true
-        } else if cfg!(feature = "poll") {
-            false
         } else {
             false // 默认不启用中断
         };

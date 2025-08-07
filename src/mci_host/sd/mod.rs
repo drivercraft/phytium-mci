@@ -19,17 +19,20 @@ use super::{
     mci_sdif::consts::SDStatus,
 };
 
-use crate::mci_host::{MCIHost, mci_host_config::MCIHostType, mci_sdif::sdif_device::SDIFDev};
 use crate::mci_sleep;
 use crate::osa::{osa_init, pool_buffer::PoolBuffer};
 use crate::tools::swap_word_byte_sequence_u32;
+use crate::mci_host::{MCIHost, mci_host_config::MCIHostType, mci_sdif::sdif_device::SDIFDev};
 use alloc::borrow::ToOwned;
 use alloc::vec;
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use cid::SdCid;
 use constants::*;
-use core::time::Duration;
 use core::{cmp::max, ptr::NonNull, str};
+use core::{
+    sync::atomic::{AtomicPtr, Ordering},
+    time::Duration,
+};
 use csd::{CsdFlags, SdCardCmdClass, SdCsd};
 use io_voltage::SdIoVoltage;
 use log::*;
@@ -39,6 +42,17 @@ use usr_param::SdUsrParam;
 
 #[cfg(feature = "dma")]
 use dma_api::{DVec, Direction};
+
+static REG_BASE: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+
+pub fn init_reg_base(base_addr: NonNull<u8>) {
+    REG_BASE.store(base_addr.as_ptr(), Ordering::Release);
+}
+
+pub fn reg_base() -> NonNull<u8> {
+    let ptr = REG_BASE.load(Ordering::Acquire);
+    unsafe { NonNull::new_unchecked(ptr) }
+}
 
 pub struct SdCard {
     base: MCICardBase,
@@ -255,7 +269,7 @@ impl SdCard {
         /* set DATA bus width */
         let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
         host.dev.card_bus_width_set(MCIHostBusWdith::Bit1);
-        /*set card freq to 400KHZ*/
+        /* set card freq to 400KHZ */
         self.base.bus_clk_hz = host.dev.card_clock_set(MCI_HOST_CLOCK_400KHZ, host);
 
         /* probe bus voltage */
@@ -394,6 +408,11 @@ impl SdCard {
                 /* CMD0 */
                 return Err(MCIHostError::GoIdleFailed);
             }
+
+            // dump_registers(unsafe { NonNull::new_unchecked(0xfffff00028000000 as *mut u8) }, 0x1000);
+
+            info!("Card is idle, start to send operation condition");
+
             /* Check card's supported interface condition. */
             if self.interface_condition_send().is_ok() {
                 /* CMD8 */
@@ -1187,7 +1206,8 @@ impl SdCard {
                         "\r\nError: CMD8 response error, response 0x{:x}\r\n",
                         response[0]
                     );
-                    return Err(MCIHostError::CardNotSupport);
+                    break;
+                    // return Err(MCIHostError::CardNotSupport);
                 } else {
                     break;
                 }

@@ -1,13 +1,13 @@
 pub mod consts;
 pub mod err;
 pub mod mci_data;
+pub mod mci_intr;
 pub mod regs;
 
 mod mci_cmd;
 mod mci_cmddata;
 mod mci_config;
 mod mci_hardware;
-mod mci_irq;
 mod mci_timing;
 
 #[cfg(feature = "dma")]
@@ -80,6 +80,9 @@ impl MCI {
         if *config != self.config {
             self.config = config.clone();
         }
+
+        self.idma_reset_test(); /* reset internal DMA */
+
         if self.reset().is_ok() {
             self.is_ready = true;
             info!("Device initialize success !!!");

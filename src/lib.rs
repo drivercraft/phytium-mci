@@ -15,11 +15,14 @@ pub mod osa;
 
 mod tools;
 
-use alloc::{format, vec::Vec};
-use log::error;
+use log::debug;
+pub use mci::mci_intr::*;
 pub use mci_host::*;
 
-use core::time::Duration;
+use core::{
+    ptr::{self, NonNull},
+    time::Duration,
+};
 
 pub trait Kernel {
     fn sleep(duration: Duration);
@@ -45,21 +48,52 @@ macro_rules! set_impl {
     };
 }
 
-pub unsafe fn dump_memory_region(addr: usize, size: usize) {
-    let start_ptr: *const u32 = addr as *const u32;
-    let word_count = size / 4;
+pub fn dump_registers(addr: NonNull<u8>, size: usize) {
+    let base_addr = addr.as_ptr() as usize;
 
-    error!("Memory dump from 0x{addr:08x}:");
+    debug!(
+        "=== Dumping registers (0x{:x} bytes from base: 0x{:p}) ===",
+        size,
+        addr.as_ptr()
+    );
 
-    for chunk_start in (0..word_count).step_by(8) {
-        let mut values = Vec::new();
-        let chunk_end = (chunk_start + 8).min(word_count);
+    let aligned_size = size & !0xf;
 
-        for i in chunk_start..chunk_end {
-            let value = unsafe { *start_ptr.add(i) };
-            values.push(format!("{value:08x}"));
+    for offset in (0..aligned_size).step_by(16) {
+        if offset + 16 > size {
+            break;
         }
 
-        error!("  0x{:08x}: [{}]", addr + chunk_start * 4, values.join(" "));
+        unsafe {
+            let reg_addr = (base_addr + offset) as *const u32;
+
+            let val0 = if offset < size {
+                ptr::read_volatile(reg_addr)
+            } else {
+                0
+            };
+            let val1 = if offset + 4 < size {
+                ptr::read_volatile(reg_addr.add(1))
+            } else {
+                0
+            };
+            let val2 = if offset + 8 < size {
+                ptr::read_volatile(reg_addr.add(2))
+            } else {
+                0
+            };
+            let val3 = if offset + 12 < size {
+                ptr::read_volatile(reg_addr.add(3))
+            } else {
+                0
+            };
+
+            debug!(
+                "Offset 0x{:04x}: {:08x}, {:08x}, {:08x}, {:08x}",
+                offset, val0, val1, val2, val3
+            );
+        }
     }
+
+    debug!("=== End of register dump ===");
 }

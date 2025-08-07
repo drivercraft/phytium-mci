@@ -23,6 +23,12 @@ impl MCI {
         reg.write_reg(MCICardThrctl::CARDRD | cardthr.into());
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn ddr_clr_set(&self) {
+        let reg = self.config.reg();
+        reg.set_reg(MCICardReset::ENABLE);
+    }
+
     pub(crate) fn clock_set(&self, enable: bool) {
         let reg = self.config.reg();
         if enable {
@@ -45,7 +51,7 @@ impl MCI {
 
     pub(crate) fn init_external_clk(&self) -> MCIResult {
         let reg_val = MCIClkSrc::uhs_reg(0, 0, 0x5) | MCIClkSrc::UHS_EXT_CLK_ENA;
-        if 0x502 == reg_val.bits() {
+        if reg_val.bits() == 0x502 {
             info!("invalid uhs config");
         }
         self.update_exteral_clk(reg_val)?;
@@ -96,9 +102,6 @@ impl MCI {
             return Err(e);
         }
 
-        /* update clock after reset */
-        self.private_cmd_send(MCICmd::UPD_CLK, 0)?;
-
         /* for fifo reset, need to check if fifo empty */
         if reset_bits.contains(MCICtrl::FIFO_RESET) {
             if let Err(e) = reg.retry_for(
@@ -131,7 +134,7 @@ impl MCI {
         let reg_val = reg.read_reg::<MCIRawInts>();
         reg.write_reg(reg_val);
 
-        /* 清空DMAC 中断使能 */
+        /* 清空DMAC中断使能 */
         reg.write_reg(MCIDMACIntEn::empty());
 
         /* 清空DMAC 中断状态 */
@@ -146,11 +149,18 @@ impl MCI {
         reg.write_reg(MCIDescListAddrL::from_bits_truncate(descriptor as u32));
     }
 
+    pub(crate) fn idma_reset_test(&self) {
+        let reg = self.config.reg();
+        let bus_mode = reg.read_reg::<MCIBusMode>();
+        reg.set_reg(bus_mode | MCIBusMode::SWR); /* 写1软复位idma，复位完成后硬件自动清0 */
+    }
+
     pub(crate) fn idma_reset(&self) {
         let reg = self.config.reg();
         reg.set_reg(MCIBusMode::SWR); /* 写1软复位idma，复位完成后硬件自动清0 */
     }
 
+    #[allow(dead_code)]
     pub(crate) fn set_ddr_mode(&self, enable: bool) {
         let reg = self.config.reg();
         let mut uhs_val = reg.read_reg::<MCIUhsReg>();

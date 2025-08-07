@@ -214,12 +214,10 @@ bitflags! {
         const SDIO_BIT = 1 << 16;    /* RW SDIO interrupt for card */
         const ALL_BITS = 0x1FFFF;    /* RW All bits */
         // const INTS_CMD_MASK = 0x1546;
-        // const INTS_DATA_MASK = 0x2288;
         // const INTS_DATA_MASK = DTO_BIT | DCRC_BIT | DRTO_BIT | SBE_BCI_BIT;
         const INTS_DATA_MASK = 0x2288;
         // const INTS_CMD_MASK = RE_BIT | CMD_BIT | RCRC_BIT | RTO_BIT | HTO_BIT | HLE_BIT;
         const INTS_CMD_MASK = 0x5446;
-
     }
 }
 
@@ -259,6 +257,7 @@ impl FlagReg for MCIMaskedInts {
 
 // FSDIF_RAW_INTS_OFFSET Register
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct MCIRawInts: u32 {
         const CD_BIT = 1 << 0;       /* RW Card detect (CD) */
         const RE_BIT = 1 << 1;       /* RW Response error (RE) */
@@ -280,6 +279,7 @@ bitflags! {
         const ALL_BITS = 0x1FFFF;    /* RW All bits */
         const INTS_CMD_MASK = 0x1546;
         const INTS_DATA_MASK = 0x2288;
+        const CMD_ERR_INTS_MASK = 0x23C2;
     }
 }
 
@@ -526,6 +526,7 @@ impl FlagReg for MCIBusMode {
 
 // FSDIF_DMAC_STATUS_OFFSET Register
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct MCIDMACStatus: u32 {
         const TI = 1 << 0;  /* RW 发送中断。表示链表的数据发送完成 */
         const RI = 1 << 1;  /* RW 接收中断。表示链表的数据接收完成 */
@@ -560,6 +561,7 @@ bitflags! {
         const ALL_BITS = 0x3ff;
         const STATUS_EB_TX = 0b001;
         const STATUS_EB_RX = 0b010;
+        const DMAC_ERR_INTS_MASK = 0x314;
     }
 }
 

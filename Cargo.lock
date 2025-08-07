@@ -148,7 +148,7 @@ dependencies = [
  "bare-test-macros",
  "log",
  "sparreal-kernel",
- "sparreal-macros 0.9.3",
+ "sparreal-macros",
  "sparreal-rt",
 ]
 
@@ -1217,29 +1217,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efcd36303871fb977a47dabc9af736c75c492bb32a92fa26262b2741531e97ce"
 
 [[package]]
-name = "pci_types"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4325c6aa3cca3373503b1527e75756f9fbfe5fd76be4b4c8a143ee47430b8e0"
-dependencies = [
- "bit_field",
- "bitflags",
-]
-
-[[package]]
-name = "pcie"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63e45cda4b8ef9f2a8dae7cf5b58c11b41d35fbe62a4d9693fd2d143225fbf44"
-dependencies = [
- "bit_field",
- "bitflags",
- "log",
- "pci_types",
- "sparreal-macros 0.0.5",
-]
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1256,7 +1233,6 @@ dependencies = [
  "dma-api",
  "lazy_static",
  "log",
- "pcie",
  "rlsf",
  "spin 0.10.0",
  "spin_on",
@@ -1883,20 +1859,9 @@ dependencies = [
  "pasts",
  "rdrive",
  "rgb",
- "sparreal-macros 0.9.3",
+ "sparreal-macros",
  "spin 0.9.8",
  "thiserror 2.0.12",
-]
-
-[[package]]
-name = "sparreal-macros"
-version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f686073b67b2427c9243bddc10ea0a6a5300ab5354a8ee884d9126854b0abab7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.104",
 ]
 
 [[package]]
@@ -1936,7 +1901,7 @@ dependencies = [
  "rgb",
  "smccc",
  "sparreal-kernel",
- "sparreal-macros 0.9.3",
+ "sparreal-macros",
  "spin 0.9.8",
 ]
 

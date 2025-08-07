@@ -60,6 +60,7 @@ impl MCI {
             error!("device is not yet initialized!!!");
             return Err(MCIError::NotInit);
         }
+
         if self.config.trans_mode() != MCITransMode::PIO {
             error!("device is not configure in PIO transfer mode.");
             return Err(MCIError::InvalidState);
@@ -108,7 +109,6 @@ impl MCI {
         }
 
         self.cmd_transfer(cmd_data)?;
-
         Ok(())
     }
 
@@ -126,6 +126,7 @@ impl MCI {
             error!("device is not configure in PIO transfer mode.");
             return Err(MCIError::InvalidState);
         }
+
         trace!("wait for PIO cmd to finish ...");
         if let Err(err) = reg.retry_for(
             |reg: MCIRawInts| {
@@ -155,8 +156,6 @@ impl MCI {
                 return Err(err);
             }
 
-            /* clear status to ack */
-            self.raw_status_clear();
             trace!(
                 "card cnt: 0x{:x}, fifo cnt: 0x{:x}",
                 reg.read_reg::<MCITranCardCnt>(),
