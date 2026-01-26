@@ -1,4 +1,20 @@
-//! consts relative of memory pool and events
+//! Constants for memory pool and event synchronization.
+//!
+//! This module defines constants used throughout the OSA (OS Abstraction) layer,
+//! including memory pool configuration and event flags for SD/MMC operations.
+//!
+//! # Memory Pool Constants
+//!
+//! - `SZ_2M`: Size of 2 MiB
+//! - `MAX_POOL_SIZE`: Maximum size managed by the TLSF memory pool
+//! - `OSA_SEM_HANDLE_SIZE`: Size of a semaphore handle
+//!
+//! # Event Flags
+//!
+//! Event flags are used for synchronizing SD/MMC operations:
+//! - Transfer completion events (command/data/DMA)
+//! - Card detection events (insertion/removal)
+//! - Combined event masks for common scenarios
 
 /// Size of 1 MiB
 pub const SZ_2M: usize = 2 * 1024 * 1024;

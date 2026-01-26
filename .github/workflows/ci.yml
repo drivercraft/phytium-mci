@@ -1,0 +1,57 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build for aarch64-unknown-none
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly-2025-08-15
+          targets: aarch64-unknown-none
+
+      - name: Add aarch64-unknown-none target
+        run: rustup target add aarch64-unknown-none
+
+      - name: Build
+        run: cargo build --target aarch64-unknown-none
+
+      - name: Run clippy
+        run: cargo clippy --target aarch64-unknown-none -- -D warnings
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  doc:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    permissions:
+      contents: write
+    env:
+      default-branch: ${{ format('refs/heads/{0}', github.event.repository.default_branch) }}
+      RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links -D missing-docs
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@nightly
+      with:
+        toolchain: nightly-2025-08-15
+    - name: Build docs
+      continue-on-error: ${{ github.ref != env.default-branch && github.event_name != 'pull_request' }}
+      run: |
+        cargo doc --no-deps --all-features
+        printf '<meta http-equiv="refresh" content="0;url=%s/index.html">' $(cargo tree | head -1 | cut -d' ' -f1) > target/doc/index.html
+    - name: Deploy to Github Pages
+      if: ${{ github.ref == env.default-branch }}
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        single-commit: true
+        branch: gh-pages
+        folder: target/doc

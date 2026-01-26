@@ -1,3 +1,5 @@
 /target
 .bare-test*
 /docs/*
+
+.uboot*

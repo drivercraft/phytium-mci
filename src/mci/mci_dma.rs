@@ -1,3 +1,8 @@
+//! DMA transfer implementation for MCI operations
+//!
+//! This module provides DMA (Direct Memory Access) transfer capabilities
+//! for high-performance data transfers with SD/MMC cards.
+
 use core::ptr::NonNull;
 
 use alloc::vec::Vec;
@@ -5,32 +10,59 @@ use log::*;
 
 use crate::flush;
 
+use super::MCI;
 use super::consts::*;
 use super::err::*;
 use super::mci_data::MCIData;
 use super::regs::*;
-use super::MCI;
 
+/// DMA descriptor for chained DMA transfers
+///
+/// Each descriptor describes a single DMA transfer, including buffer address,
+/// length, and control flags. Descriptors can be chained together for multi-block
+/// transfers.
 #[derive(Default)]
 pub struct FSdifIDmaDesc {
+    /// Descriptor attributes and control flags
     pub attribute: u32,
+    /// Reserved field
     pub non1: u32,
+    /// Buffer length in bytes
     pub len: u32,
+    /// Reserved field
     pub non2: u32,
+    /// Buffer address low 32 bits
     pub addr_lo: u32,
+    /// Buffer address high 32 bits
     pub addr_hi: u32,
+    /// Next descriptor address low 32 bits
     pub desc_lo: u32,
+    /// Next descriptor address high 32 bits
     pub desc_hi: u32,
 }
 
+/// DMA descriptor list for chained transfers
+///
+/// Manages a linked list of DMA descriptors for efficient multi-block transfers.
 pub struct FSdifIDmaDescList {
+    /// Pointer to the first descriptor in the chain
     pub first_desc: *mut FSdifIDmaDesc,
-    pub first_desc_dma: usize, // 第一个descriptor的物理地址
+    /// Physical address of the first descriptor
+    pub first_desc_dma: usize,
+    /// Number of descriptors in the list
     pub desc_num: u32,
-    pub desc_trans_sz: u32, // 单个descriptor传输的字节数
+    /// Bytes transferred by a single descriptor
+    pub desc_trans_sz: u32,
+}
+
+impl Default for FSdifIDmaDescList {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FSdifIDmaDescList {
+    /// Creates a new empty DMA descriptor list
     pub fn new() -> Self {
         FSdifIDmaDescList {
             first_desc: core::ptr::null_mut(),
@@ -41,14 +73,22 @@ impl FSdifIDmaDescList {
     }
 }
 
-//* DMA 相关的函数 */
+//* DMA related functions */
 impl MCI {
+    /// Sets DMA interrupt enable bits
+    ///
+    /// Enables receive, transmit, and fatal bus error interrupts for DMA transfers.
     pub fn dma_int_set(&mut self) {
         self.config
             .reg()
             .modify_reg(|reg| MCIDMACIntEn::RI | MCIDMACIntEn::TI | MCIDMACIntEn::FBE | reg);
     }
 
+    /// Dumps DMA descriptor information for debugging
+    ///
+    /// # Arguments
+    ///
+    /// * `desc_in_use` - Number of descriptors currently in use
     pub fn dump_dma_descriptor(&self, desc_in_use: u32) {
         debug!("{} dma desc in use!", desc_in_use);
         if !self.desc_list.first_desc.is_null() {
@@ -56,14 +96,14 @@ impl MCI {
                 unsafe {
                     let cur_desc = &*self.desc_list.first_desc.add(i as usize);
                     debug!("descriptor no {} @{:p}", i, cur_desc);
-                    debug!("\tattribute: 0x{:x}", (*cur_desc).attribute);
-                    debug!("\tnon1: 0x{:x}", (*cur_desc).non1);
-                    debug!("\tlen: 0x{:x}", (*cur_desc).len);
-                    debug!("\tnon2: 0x{:x}", (*cur_desc).non2);
-                    debug!("\taddr_lo: 0x{:x}", (*cur_desc).addr_lo);
-                    debug!("\taddr_hi: 0x{:x}", (*cur_desc).addr_hi);
-                    debug!("\tdesc_lo: 0x{:x}", (*cur_desc).desc_lo);
-                    debug!("\tdesc_hi: 0x{:x}", (*cur_desc).desc_hi);
+                    debug!("\tattribute: 0x{:x}", cur_desc.attribute);
+                    debug!("\tnon1: 0x{:x}", cur_desc.non1);
+                    debug!("\tlen: 0x{:x}", cur_desc.len);
+                    debug!("\tnon2: 0x{:x}", cur_desc.non2);
+                    debug!("\taddr_lo: 0x{:x}", cur_desc.addr_lo);
+                    debug!("\taddr_hi: 0x{:x}", cur_desc.addr_hi);
+                    debug!("\tdesc_lo: 0x{:x}", cur_desc.desc_lo);
+                    debug!("\tdesc_hi: 0x{:x}", cur_desc.desc_hi);
                 }
             }
         }
@@ -72,20 +112,20 @@ impl MCI {
     /// setup DMA descriptor list before do transcation
     pub(crate) fn setup_dma_descriptor(&mut self, data: &MCIData) -> MCIResult {
         let desc_list = &self.desc_list;
-        // 一个desc可以传输的块数
+        // Number of blocks that can be transferred by one descriptor
         let desc_blocks = desc_list.desc_trans_sz / data.blksz();
         let mut remain_blocks = data.blkcnt();
         let mut buf_addr = data.buf_dma();
-        let mut trans_blocks: u32; // 本次循环被传输的块
+        let mut trans_blocks: u32; // Blocks transferred in this loop
         let mut is_first;
         let mut is_last;
 
         let mut desc_num = 1u32;
         let data_len = data.blkcnt() * data.blksz();
-        // 计算需要多少desc来传输
+        // Calculate how many descriptors are needed for transfer
         if data_len > desc_list.desc_trans_sz {
             desc_num = data_len / desc_list.desc_trans_sz;
-            desc_num += if data_len % desc_list.desc_trans_sz == 0 {
+            desc_num += if data_len.is_multiple_of(desc_list.desc_trans_sz) {
                 0
             } else {
                 1
@@ -141,7 +181,7 @@ impl MCI {
                 (*cur_desc).len = trans_blocks * data.blksz();
 
                 // set data buffer for transfer
-                if buf_addr % data.blksz() as usize != 0 {
+                if !buf_addr.is_multiple_of(data.blksz() as usize) {
                     error!(
                         "Data buffer 0x{:x} do not align to {}!",
                         buf_addr,
@@ -160,7 +200,7 @@ impl MCI {
 
                 // set address of next descriptor entry, NULL for last entry
                 next_desc_addr = if is_last { 0 } else { next_desc_addr };
-                if next_desc_addr as usize % core::mem::size_of::<FSdifIDmaDesc>() != 0 {
+                if !next_desc_addr.is_multiple_of(core::mem::size_of::<FSdifIDmaDesc>()) {
                     // make sure descriptor aligned and not cross page boundary
                     error!("DMA descriptor 0x{:x} do not align!", next_desc_addr);
                     return Err(MCIError::DmaBufUnalign);
@@ -198,7 +238,7 @@ impl MCI {
         );
         self.interrupt_mask_set(MCIIntrType::DmaIntr, MCIDMACIntEn::INTS_MASK.bits(), true);
 
-        self.setup_dma_descriptor(&data)?;
+        self.setup_dma_descriptor(data)?;
 
         let data_len = data.blkcnt() * data.blksz();
         info!(

@@ -1,5 +1,6 @@
 use bitflags::bitflags;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdTimingMode {
     SDR12DefaultMode = 0,

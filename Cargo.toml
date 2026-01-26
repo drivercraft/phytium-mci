@@ -1,7 +1,16 @@
 [package]
 name = "phytium-mci"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+description = "A no_std Rust driver for SD/MMC cards on Phytium E2000 series SoCs"
+authors = ["周睿 <zrufo747@outlook.com>"]
+repository = "https://github.com/drivercraft/phytium-mci"
+homepage = "https://github.com/drivercraft/phytium-mci"
+documentation = "https://docs.rs/phytium-mci"
+license = "MIT"
+readme = "README.md"
+keywords = ["sd", "phytium", "no-std", "embedded", "driver", "storage"]
+categories = ["no-std", "embedded", "hardware-support"]
 
 [dependencies]
 tock-registers = "0.9.0"
@@ -14,7 +23,7 @@ spin = "0.10.0"
 rlsf = "0.2.1"
 
 [dev-dependencies]
-bare-test = "0.4"
+bare-test = "0.7"
 pcie = "0.2"
 byte-unit = { version = "5.1.6", default-features = false, features = ["byte"] }
 spin_on = "0.1.1"
@@ -23,7 +32,7 @@ spin_on = "0.1.1"
 bare-test-macros = "0.2"
 
 [features]
-default = ["dma", "irq"]
+default = ["pio", "poll"]
 dma = []
 pio = []
 poll = []

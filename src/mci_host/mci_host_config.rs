@@ -10,23 +10,30 @@ use super::sd::consts::{SD_BLOCK_SIZE, SD_CLOCK_50MHZ, SD_MAX_RW_BLK};
 #[allow(unused)]
 #[derive(Clone, Copy)]
 pub struct MCIHostConfig {
-    pub(crate) host_id: MCIId,                 // 主机 ID
-    pub(crate) host_type: MCIHostType,         // 主机类型
-    pub(crate) card_type: MCIHostCardType,     // 卡类型
-    pub(crate) enable_irq: bool,               // 是否启用中断
-    pub(crate) enable_dma: bool,               // 是否启用 DMA
-    pub(crate) endian_mode: MCIHostEndianMode, // 字节序模式
-    pub(crate) max_trans_size: usize,          // 最大传输大小
-    pub(crate) def_block_size: usize,          // 默认块大小
-    pub(crate) card_clock: u32,                // 卡时钟频率
-    pub(crate) is_uhs_card: bool,              // 是否为 UHS 卡
-                                               /* for SDIO card, to support card customized interrupt handling */ // todo 暂时没实现这部分功能
+    pub(crate) host_id: MCIId,                 // Host ID
+    pub(crate) host_type: MCIHostType,         // Host type
+    pub(crate) card_type: MCIHostCardType,     // Card type
+    pub(crate) enable_irq: bool,               // Whether to enable interrupt
+    pub(crate) enable_dma: bool,               // Whether to enable DMA
+    pub(crate) endian_mode: MCIHostEndianMode, // Endianness mode
+    pub(crate) max_trans_size: usize,          // Maximum transfer size
+    pub(crate) def_block_size: usize,          // Default block size
+    pub(crate) card_clock: u32,                // Card clock frequency
+    pub(crate) is_uhs_card: bool,              // Whether it is a UHS card
+                                               /* for SDIO card, to support card customized interrupt handling */ // todo Not implemented yet
                                                // todo timeTuner
 }
 
 #[allow(unused)]
 impl MCIHostConfig {
-    /// 目前默认为DMA POLL模式
+    /// Creates a new host configuration with default values.
+    ///
+    /// The default configuration uses:
+    /// - DMA transfer mode (if `dma` feature enabled)
+    /// - Polling mode (if `poll` feature enabled)
+    /// - 50 MHz card clock
+    /// - 512 byte block size
+    /// - Little endian mode
     pub fn new() -> Self {
         let mut config = Self {
             host_id: MCIId::MCI1,
@@ -60,18 +67,26 @@ impl MCIHostConfig {
 }
 
 #[allow(unused)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostType {
+    /// Standard SD/MMC host controller
     SDMMC,
+    /// Phytium SDIF host controller
     SDIF,
 }
 
 #[allow(unused)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostCardType {
+    /// Standard SD card (full-size)
     StandardSD,
+    /// MicroSD card
     MicroSD,
+    /// eMMC (embedded MMC)
     EMMC,
+    /// SDIO card with I/O functionality
     SDIO,
 }
 
