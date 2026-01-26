@@ -228,7 +228,7 @@ pub(crate) fn sleep(duration: Duration) {
 
 #[cfg(feature = "dma")]
 pub(crate) fn mmap(virt_addr: NonNull<u8>) -> u64 {
-    extern "Rust" {
+    unsafe extern "Rust" {
         fn _phytium_mci_map(virt_addr: NonNull<u8>) -> u64;
     }
 
