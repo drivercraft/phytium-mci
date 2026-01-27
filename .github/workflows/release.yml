@@ -53,7 +53,8 @@ jobs:
       - name: Validate branch and tag
         run: |
           BRANCH=$(git branch --show-current)
-          if contains(github.ref_name, '-pre.'); then
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == *-pre.* ]]; then
             if [ "$BRANCH" != "dev" ]; then
               echo "Error: Prerelease tags must be on dev branch, but current branch is $BRANCH"
               exit 1
@@ -85,7 +86,8 @@ jobs:
       - name: Validate branch and tag
         run: |
           BRANCH=$(git branch --show-current)
-          if contains(github.ref_name, '-pre.'); then
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == *-pre.* ]]; then
             if [ "$BRANCH" != "dev" ]; then
               echo "Error: Prerelease tags must be on dev branch, but current branch is $BRANCH"
               exit 1
