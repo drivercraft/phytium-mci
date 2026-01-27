@@ -47,7 +47,7 @@ Hardware Support     (IoPad pin configuration, OSA memory/timing)
 
 ## Requirements
 
-- Rust 2021 edition
+- Rust 2024 edition
 - Phytium E2000 series SoC or compatible platform
 - `no_std` environment (bare-metal or custom OS)
 
@@ -461,7 +461,7 @@ println!("Bus width support: {:#?}", sdcard.scr().bus_widths());
 
 ## License
 
-This project is licensed under MIT OR Apache-2.0.
+This project is licensed under MIT.
 
 ## Contributing
 
