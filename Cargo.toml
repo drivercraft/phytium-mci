@@ -23,6 +23,7 @@ spin = "0.10.0"
 rlsf = "0.2.1"
 
 [dev-dependencies]
+# Hardware integration test dependencies (for tests/test.rs)
 bare-test = "0.7"
 pcie = "0.2"
 byte-unit = { version = "5.1.6", default-features = false, features = ["byte"] }

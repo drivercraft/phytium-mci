@@ -374,31 +374,43 @@ let buffer = PoolBuffer::alloc(4096, 512).expect("Allocation failed");
 
 ## Testing
 
-The crate includes bare-metal tests that run on actual Phytium Pi hardware.
+⚠️ **Hardware integration tests require physical Phytium Pi hardware.**
 
-### Prerequisites
+This project provides bare-metal integration tests that run on actual Phytium Pi hardware to verify SD/MMC card functionality.
 
-1. Install ostool:
+#### Prerequisites
+
+1. **Phytium Pi Hardware**
+   - Phytium Pi development board
+   - SD card inserted
+   - Serial port connected
+
+2. **Install ostool:**
    ```bash
    cargo install ostool
    ```
 
-2. Configure Phytium Pi device tree (use `firmware/phytium.dtb`)
+3. **Configure device tree** (use `firmware/phytium.dtb`)
 
-### Running Tests
+#### Running Hardware Tests
 
 ```bash
-# Default: DMA mode
-cargo test --test test -- --show-output
+# Build and run on Phytium Pi
+cargo test --test test --target aarch64-unknown-none -- --show-output uboot
 
-# PIO mode
-cargo test --test test --no-default-features --features pio -- --show-output
+# PIO mode only
+cargo test --test test --target aarch64-unknown-none --no-default-features --features pio -- --show-output uboot
 ```
 
-Tests communicate via serial port and require:
+**IMPORTANT:** Hardware integration tests CANNOT run on:
+- ❌ Virtual machines or emulators
+- ❌ x86_64 or other non-ARM platforms
+- ❌ Systems without SD/MMC hardware
+
+The tests communicate via serial port and require:
 - U-Boot with TFTP support
-- Phytium Pi hardware
-- Serial port connection
+- Physical Phytium Pi hardware
+- Working SD card interface
 
 ## Platform Abstraction
 
