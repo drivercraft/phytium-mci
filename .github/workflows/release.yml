@@ -61,7 +61,11 @@ jobs:
         with:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-pre.') }}
-          generate_release_notes: true
+          body: |
+            ## ${{ github.ref_name }}
+
+            - [Documentation](https://docs.rs/phytium-mci)
+            - [crates.io](https://crates.io/crates/phytium-mci)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
