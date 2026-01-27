@@ -9,7 +9,7 @@ homepage = "https://github.com/drivercraft/phytium-mci"
 documentation = "https://docs.rs/phytium-mci"
 license = "MIT"
 readme = "README.md"
-keywords = ["sd", "phytium", "no-std", "embedded", "driver", "storage"]
+keywords = ["sd", "phytium", "no-std", "embedded", "driver"]
 categories = ["no-std", "embedded", "hardware-support"]
 
 [dependencies]
