@@ -1,9 +1,18 @@
+//! Data transfer structures for MCI operations
+//!
+//! This module defines the data structures used for transferring data
+//! between the host and SD/MMC cards.
+
 use alloc::vec::Vec;
 
+/// Data transfer structure for MCI operations
+///
+/// Represents a data buffer with associated metadata for block transfers.
 #[derive(Debug, Clone)]
 pub(crate) struct MCIData {
-    // todo 使用智能指针涉及到大量的细微调整和代码修改，且十分容易造成潜在的非法的地址访问
-    // 暂时不考虑仿照源码使用指针来表示这里的buf
+    // todo Using smart pointers involves extensive fine-tuning and code modifications,
+    // and can easily cause potential illegal memory access
+    // Temporarily not considering using pointers to represent buf here as in the source code
     buf: Option<Vec<u32>>,
     buf_dma: usize,
     blksz: u32,

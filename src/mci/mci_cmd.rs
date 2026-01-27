@@ -1,14 +1,19 @@
-use core::sync::atomic::compiler_fence;
+//! Command transfer implementation for MCI operations
+//!
+//! This module handles the sending of commands to SD/MMC cards and
+//! processing of their responses.
+
 use core::sync::atomic::Ordering;
+use core::sync::atomic::compiler_fence;
 
 use crate::aarch::dsb;
 use log::*;
 
+use super::MCI;
 use super::consts::*;
 use super::err::*;
 use super::mci_cmddata::MCICmdData;
 use super::regs::*;
-use super::MCI;
 
 impl MCI {
     pub(crate) fn private_cmd_send(&self, cmd: MCICmd, arg: u32) -> MCIResult {
@@ -44,7 +49,7 @@ impl MCI {
         Ok(())
     }
 
-    pub(crate) fn cmd_transfer<'a>(&self, cmd_data: &'a MCICmdData) -> MCIResult {
+    pub(crate) fn cmd_transfer(&self, cmd_data: &MCICmdData) -> MCIResult {
         let mut raw_cmd = MCICmd::empty();
         let reg = self.config.reg();
 
@@ -56,26 +61,26 @@ impl MCI {
         if flag.contains(MCICmdFlag::ABORT) {
             raw_cmd |= MCICmd::STOP_ABORT;
         }
-        /* 命令需要进行卡初始化，如CMD-0 */
+        /* Command requires card initialization, e.g., CMD-0 */
         if flag.contains(MCICmdFlag::NEED_INIT) {
             raw_cmd |= MCICmd::INIT;
         }
-        /* 命令涉及电压切换 */
+        /* Command involves voltage switching */
         if flag.contains(MCICmdFlag::SWITCH_VOLTAGE) {
             raw_cmd |= MCICmd::VOLT_SWITCH;
         }
-        /* 命令传输过程伴随数据传输 */
+        /* Command transmission is accompanied by data transfer */
         if flag.contains(MCICmdFlag::EXP_DATA) {
             raw_cmd |= MCICmd::DAT_EXP;
             if flag.contains(MCICmdFlag::WRITE_DATA) {
                 raw_cmd |= MCICmd::DAT_WRITE;
             }
         }
-        /* 命令需要进行CRC校验 */
+        /* Command requires CRC check */
         if flag.contains(MCICmdFlag::NEED_RESP_CRC) {
             raw_cmd |= MCICmd::RESP_CRC;
         }
-        /* 命令需要响应回复 */
+        /* Command expects response */
         if flag.contains(MCICmdFlag::EXP_RESP) {
             raw_cmd |= MCICmd::RESP_EXP;
             if flag.contains(MCICmdFlag::EXP_LONG_RESP) {
@@ -115,16 +120,15 @@ impl MCI {
             return Err(MCIError::NotInit);
         }
 
-        if let Some(data) = cmd_data.get_mut_data() {
-            if read {
-                if MCITransMode::PIO == self.config.trans_mode() {
-                    self.pio_read_data(data)?;
-                }
-            }
+        if let Some(data) = cmd_data.get_mut_data()
+            && read
+            && MCITransMode::PIO == self.config.trans_mode()
+        {
+            self.pio_read_data(data)?;
         }
 
         /* check response of cmd */
-        let flag = cmd_data.flag().clone();
+        let flag = *cmd_data.flag();
         let reg = self.config.reg();
         if flag.contains(MCICmdFlag::EXP_RESP) {
             let response = cmd_data.get_mut_response();
@@ -167,7 +171,7 @@ impl MCI {
             false,
         );
         self.interrupt_mask_set(MCIIntrType::DmaIntr, MCIDMACIntEn::INTS_MASK.bits(), false);
-        info!("cmd send done ...");
+        debug!("cmd send done ...");
 
         self.prev_cmd = cmd_data.cmdidx();
 

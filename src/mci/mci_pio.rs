@@ -1,8 +1,13 @@
+//! PIO (Programmed I/O) transfer implementation for MCI operations
+//!
+//! This module provides PIO-based data transfer capabilities for
+//! simple, low-overhead data transfers without DMA.
+
+use super::MCI;
 use super::consts::*;
 use super::err::*;
 use super::mci_data::MCIData;
 use super::regs::*;
-use super::MCI;
 use log::*;
 
 impl MCI {
@@ -17,8 +22,8 @@ impl MCI {
 
         /* write fifo data */
         reg.write_reg(MCICmd::DAT_WRITE);
-        for i in 0..wr_times {
-            reg.write_reg(MCIDataReg::from_bits_truncate(buf[i]));
+        for &word in buf.iter().take(wr_times) {
+            reg.write_reg(MCIDataReg::from_bits_truncate(word));
         }
         Ok(())
     }

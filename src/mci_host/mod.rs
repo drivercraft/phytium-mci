@@ -1,6 +1,59 @@
+//! MMC/SD Host Controller Protocol Layer.
+//!
+//! This module implements the SD/MMC host controller protocol, providing the
+//! abstraction layer between the hardware controller and the card-specific
+//! drivers. It handles command issuing, data transfers, and card state management.
+//!
+//! # Overview
+//!
+//! The `MCIHost` provides:
+//! - **Command management** - Sending commands and receiving responses
+//! - **Data transfer** - Block read/write operations with DMA or PIO
+//! - **Card state** - Tracking card voltage, bus width, and clock frequency
+//! - **Card detection** - Automatic card insertion/removal detection
+//! - **Capability reporting** - Host controller capabilities and limits
+//!
+//! # Architecture
+//!
+//! ```text
+//! ┌─────────────────────────────────────┐
+//! │  Card Driver (SdCard, EmmcCard)    │
+//! └──────────────┬──────────────────────┘
+//!                │
+//! ┌──────────────▼──────────────────────┐
+//! │         MCIHost                     │
+//! │  - Command sequencing               │
+//! │  - Card state management            │
+//! │  - Transfer coordination            │
+//! └──────────────┬──────────────────────┘
+//!                │
+//! ┌──────────────▼──────────────────────┐
+//! │         SDIFDev                     │
+//! │  - Hardware register access         │
+//! │  - DMA/PIO control                  │
+//! │  - Interrupt handling               │
+//! └─────────────────────────────────────┘
+//! ```
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use phytium_mci::mci_host::{MCIHost, MCIHostConfig};
+//! use core::ptr::NonNull;
+//!
+//! // Create host configuration
+//! let config = MCIHostConfig::new();
+//!
+//! // Create host instance
+//! let mut host = MCIHost::new(device, config);
+//!
+//! // Initialize the host
+//! host.init(NonNull::new_unchecked(0x2800_1000 as *mut u8))?;
+//! ```
+
 #[allow(unused)]
 mod constants;
-mod err;
+pub mod err;
 mod mci_card_base;
 mod mci_host_card_detect;
 mod mci_host_config;
@@ -21,6 +74,32 @@ use mci_sdif::sdif_device::SDIFDev;
 
 type MCIHostCardIntFn = fn();
 
+/// MMC/SD Host Controller.
+///
+/// `MCIHost` represents an SD/MMC host controller instance. It manages the
+/// communication between the host and the SD/MMC card, handling commands,
+/// data transfers, and card state.
+///
+/// # Card State
+///
+/// The host tracks the following card state:
+/// - `curr_voltage` - Current operating voltage (3.3V or 1.8V)
+/// - `curr_bus_width` - Current bus width (1, 4, or 8 bits)
+/// - `curr_clock_freq` - Current clock frequency in Hz
+///
+/// # Capabilities
+///
+/// The host reports its capabilities through the `capability` field:
+/// - Supported voltage ranges
+/// - Supported bus widths
+/// - High-speed mode support
+/// - DMA support
+/// - UHS-I mode support
+///
+/// # Card Detection
+///
+/// Optional card detection is available through the `cd` field when
+/// supported by the hardware.
 #[allow(unused)]
 pub struct MCIHost {
     pub(crate) dev: Box<SDIFDev>,
@@ -35,9 +114,9 @@ pub struct MCIHost {
     pub(crate) max_block_size: u32,
     pub(crate) tuning_type: u8,
 
-    pub(crate) cd: Option<Rc<MCIHostCardDetect>>, // 卡检测
+    pub(crate) cd: Option<Rc<MCIHostCardDetect>>, // Card detection
     pub(crate) card_int: MCIHostCardIntFn,
-    //todo uint8_t tuningType 没有移植
+    //todo uint8_t tuningType not yet ported
 }
 
 #[allow(unused)]

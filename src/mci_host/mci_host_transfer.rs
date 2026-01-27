@@ -42,15 +42,15 @@ impl MCIHostTransfer {
 
 #[allow(unused)]
 pub(crate) struct MCIHostData {
-    stream_transfer: bool,       // 指示是否为流数据传输命令
-    enable_auto_command12: bool, // 启用自动 CMD12
-    enable_auto_command23: bool, // 启用自动 CMD23
-    enable_ignore_error: bool,   // 启用忽略错误以读取/写入所有数据
-    data_type: u8,               // 用于区分普通/调谐/启动数据
-    block_size: usize,           // 块大小
-    block_count: u32,            // 块数量
-    rx_data: Option<Vec<u32>>,   // 用于保存读取数据的缓冲区
-    tx_data: Option<Vec<u32>>,   // 用于写入数据的缓冲区
+    stream_transfer: bool, // Indicates whether this is a stream data transfer command
+    enable_auto_command12: bool, // Enable auto CMD12
+    enable_auto_command23: bool, // Enable auto CMD23
+    enable_ignore_error: bool, // Enable ignoring errors to read/write all data
+    data_type: u8,         // Used to distinguish normal/tuning/boot data
+    block_size: usize,     // Block size
+    block_count: u32,      // Block count
+    rx_data: Option<Vec<u32>>, // Buffer to save read data
+    tx_data: Option<Vec<u32>>, // Buffer for write data
 }
 
 #[allow(unused)]

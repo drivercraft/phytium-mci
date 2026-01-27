@@ -1,0 +1,77 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build ${{ matrix.targets }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust-toolchain: [nightly-2025-08-15]
+        targets: [aarch64-unknown-none-softfloat, aarch64-unknown-none]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust-toolchain }}
+          components: rust-src, clippy, rustfmt
+          targets: ${{ matrix.targets }}
+
+      - name: Check rust version
+        run: rustc --version --verbose
+
+      - name: Check code format
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo build --target ${{ matrix.targets }}
+
+      - name: Run clippy
+        run: cargo clippy --target ${{ matrix.targets }} -- -D warnings
+
+  doc:
+    name: Build and deploy documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2025-08-15
+          components: rust-src
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-doc-
+            ${{ runner.os }}-cargo-
+
+      - name: Build docs
+        run: cargo doc --no-deps --target aarch64-unknown-none
+
+      - name: Create index redirect
+        run: |
+          printf '<meta http-equiv="refresh" content="0;url=phytium_mci/index.html">' > target/aarch64-unknown-none/doc/index.html
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          single-commit: true
+          branch: gh-pages
+          folder: target/aarch64-unknown-none/doc

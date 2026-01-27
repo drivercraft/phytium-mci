@@ -1,3 +1,8 @@
+//! Hardware control operations for MCI
+//!
+//! This module provides direct hardware register access and control
+//! functions for the MCI controller.
+
 use super::MCI;
 
 use super::consts::*;
@@ -6,7 +11,7 @@ use super::regs::*;
 
 use log::*;
 
-/// 直接操作寄存器相关的 API
+/// APIs for direct register operations
 impl MCI {
     pub(crate) fn status_get(&self) -> MCIStatus {
         let reg = self.config.reg();
@@ -108,14 +113,14 @@ impl MCI {
         }
 
         /* for fifo reset, need to check if fifo empty */
-        if reset_bits.contains(MCICtrl::FIFO_RESET) {
-            if let Err(e) = reg.retry_for(
+        if reset_bits.contains(MCICtrl::FIFO_RESET)
+            && let Err(e) = reg.retry_for(
                 |reg: MCIStatus| reg.contains(MCIStatus::FIFO_EMPTY),
                 Some(RETRIES_TIMEOUT),
-            ) {
-                error!("Fifo not empty!");
-                return Err(e);
-            }
+            )
+        {
+            error!("Fifo not empty!");
+            return Err(e);
         }
         Ok(())
     }
@@ -132,17 +137,17 @@ impl MCI {
     pub(crate) fn clear_interrupt_status(&self) {
         let reg = self.config.reg();
 
-        /* 清空中断使能位 */
+        /* Clear interrupt enable bits */
         reg.write_reg(MCIIntMask::empty());
 
-        /* 清空当前的中断状态 */
+        /* Clear current interrupt status */
         let reg_val = reg.read_reg::<MCIRawInts>();
         reg.write_reg(reg_val);
 
-        /* 清空DMAC 中断使能 */
+        /* Clear DMAC interrupt enable */
         reg.write_reg(MCIDMACIntEn::empty());
 
-        /* 清空DMAC 中断状态 */
+        /* Clear DMAC interrupt status */
         let reg_val = reg.read_reg::<MCIDMACStatus>();
         reg.write_reg(reg_val);
     }
@@ -156,7 +161,7 @@ impl MCI {
 
     pub(crate) fn idma_reset(&self) {
         let reg = self.config.reg();
-        reg.set_reg(MCIBusMode::SWR); /* 写1软复位idma，复位完成后硬件自动清0 */
+        reg.set_reg(MCIBusMode::SWR); /* Write 1 to soft reset idma, hardware auto-clears to 0 when reset completes */
     }
 
     pub(crate) fn set_ddr_mode(&self, enable: bool) {
@@ -183,7 +188,7 @@ impl MCI {
 
     pub(crate) fn raw_status_clear(&self) {
         let reg = self.config.reg();
-        /* 读写RawInts 使之清空 */
+        /* Read and write RawInts to clear it */
         reg.write_reg(self.raw_status_get());
     }
 
@@ -194,7 +199,7 @@ impl MCI {
 
     pub(crate) fn dma_status_clear(&self) {
         let reg = self.config.reg();
-        /* 读写DMACStatus 使之清空 */
+        /* Read and write DMACStatus to clear it */
         reg.write_reg(self.dma_status_get());
     }
 

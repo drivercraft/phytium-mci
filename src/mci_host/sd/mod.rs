@@ -1,3 +1,63 @@
+//! SD Card Driver.
+//!
+//! This module provides a high-level driver for SD memory cards, implementing
+//! the SD specification (versions 1.0-3.0). It supports SDSC, SDHC, and SDXC
+//! cards with various bus widths and transfer modes.
+//!
+//! # Supported Card Types
+//!
+//! - **SDSC** (Standard Capacity SD Card): ≤ 2GB
+//! - **SDHC** (High Capacity SD Card): 2GB - 32GB
+//! - **SDXC** (Extended Capacity SD Card): 32GB - 2TB
+//!
+//! # Features
+//!
+//! - **Bus Widths**: 1-bit and 4-bit data bus
+//! - **Voltage**: 3.3V (default) and 1.8V (UHS-I)
+//! - **Speed Modes**: Default, High Speed, SDR12, SDR25, SDR50, SDR104
+//! - **Transfer Modes**: DMA and PIO
+//! - **Card Detection**: Automatic card detection
+//! - **Write Protection**: Card-level write protection support
+//!
+//! # Card Information
+//!
+//! The driver reads and provides access to:
+//! - **CID** (Card Identification): Manufacturer, product name, serial number
+//! - **CSD** (Card Specific Data): Capacity, block size, speed class
+//! - **SCR** (SD Configuration Register): SD version, bus width support
+//! - **SSR** (SD Status): Card status information
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use phytium_mci::sd::SdCard;
+//! use phytium_mci::IoPad;
+//! use core::ptr::NonNull;
+//!
+//! // Create IOPAD instance
+//! let iopad = unsafe { IoPad::new(NonNull::new_unchecked(0x2800_0000 as *mut u8)) };
+//!
+//! // Create SD card instance
+//! let mut sdcard = unsafe {
+//!     SdCard::new(
+//!         NonNull::new_unchecked(0x2800_1000 as *mut u8),
+//!         iopad
+//!     )
+//! };
+//!
+//! // Initialize the card
+//! sdcard.init(NonNull::new_unchecked(0x2800_1000 as *mut u8))?;
+//!
+//! // Read blocks
+//! let mut buffer = Vec::new();
+//! sdcard.read_blocks(&mut buffer, 0, 1)?;
+//!
+//! // Get card information
+//! println!("Capacity: {} MB", sdcard.capacity() / (1024 * 1024));
+//! println!("Block size: {} bytes", sdcard.block_size());
+//! println!("Block count: {}", sdcard.block_count());
+//! ```
+
 #![allow(dead_code)]
 mod cid;
 pub(crate) mod consts;
@@ -18,13 +78,13 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 use core::time::Duration;
 use io_voltage::SdIoVoltage;
 
+use crate::mci_host::MCIHost;
 use crate::mci_host::mci_host_config::MCIHostType;
 use crate::mci_host::mci_sdif::sdif_device::SDIFDev;
-use crate::mci_host::MCIHost;
 use crate::osa::osa_init;
 use crate::osa::pool_buffer::PoolBuffer;
 use crate::tools::swap_word_byte_sequence_u32;
-use crate::{sleep, IoPad};
+use crate::{IoPad, sleep};
 
 use super::constants::*;
 use super::err::{MCIHostError, MCIHostStatus};
@@ -43,15 +103,60 @@ use usr_param::SdUsrParam;
 
 static REG_BASE: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
 
+/// Initialize the global register base address.
+///
+/// This function sets the global register base address used by the
+/// SD card driver for hardware access.
+///
+/// # Arguments
+///
+/// * `base_addr` - Base address of the MCI register block
 pub fn init_reg_base(base_addr: NonNull<u8>) {
     REG_BASE.store(base_addr.as_ptr(), Ordering::Release);
 }
 
+/// Get the global register base address.
+///
+/// Returns the previously set register base address.
+///
+/// # Panics
+///
+/// Panics if the register base has not been initialized.
 pub fn reg_base() -> NonNull<u8> {
     let ptr = REG_BASE.load(Ordering::Acquire);
     unsafe { NonNull::new_unchecked(ptr) }
 }
 
+/// SD Card driver.
+///
+/// `SdCard` provides a high-level interface for SD memory cards,
+/// handling initialization, data transfer, and card information access.
+///
+/// # Card State
+///
+/// The driver maintains the following card state:
+/// - `version` - SD specification version (1.0-3.0)
+/// - `flags` - Card capability flags
+/// - `current_timing` - Current timing mode
+/// - `operation_voltage` - Current operating voltage
+/// - `block_count` - Total number of blocks
+///
+/// # Card Information
+///
+/// Card identification and configuration data is available through:
+/// - `cid` - Card Identification Register
+/// - `csd` - Card Specific Data Register
+/// - `scr` - SD Configuration Register
+/// - `stat` - SD Status Register
+///
+/// # Initialization
+///
+/// The card must be initialized before use. The initialization process:
+/// 1. Resets the card to idle state
+/// 2. Negotiates operating voltage
+/// 3. Queries card capacity and capabilities
+/// 4. Configures bus width and timing
+/// 5. Reads card information registers
 pub struct SdCard {
     base: MCICardBase,
     usr_param: SdUsrParam,
@@ -69,12 +174,22 @@ pub struct SdCard {
 }
 
 impl SdCard {
+    /// Creates a new SD card instance
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - Base address of the MCI controller registers
+    /// * `iopad` - I/O pad instance for signal delay tuning
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal buffer allocation fails or SDIF/SDMMC configuration fails.
     pub fn new(addr: NonNull<u8>, iopad: IoPad) -> Self {
         osa_init();
 
         let mci_host_config = MCIHostConfig::new();
 
-        // 组装 base
+        // Assemble base
         let internal_buffer = match PoolBuffer::new(
             mci_host_config.max_trans_size,
             mci_host_config.def_block_size,
@@ -89,14 +204,14 @@ impl SdCard {
             base.internal_buffer.size()
         );
 
-        // 组装 host
+        // Assemble host
         let desc_num = mci_host_config.max_trans_size / mci_host_config.def_block_size;
         let sdif_device = SDIFDev::new(addr, desc_num);
         sdif_device.iopad_set(iopad);
         let host = MCIHost::new(Box::new(sdif_device), mci_host_config);
         let host_type = host.config.host_type;
 
-        // 初步组装 SdCard
+        // Initially assemble SdCard
         let mut sd_card = SdCard::from_base(base);
         sd_card.base.host = Some(host);
 
@@ -104,10 +219,8 @@ impl SdCard {
             if sd_card.sdif_config().is_err() {
                 panic!("Config fail!");
             }
-        } else {
-            if sd_card.sdmmc_config().is_err() {
-                panic!("Config fail!");
-            }
+        } else if sd_card.sdmmc_config().is_err() {
+            panic!("Config fail!");
         }
 
         sd_card
@@ -205,8 +318,23 @@ impl SdCard {
     }
 }
 
-/// SD卡其他操作命令
+/// Other SD card operation commands
 impl SdCard {
+    /// Initializes the SD card
+    ///
+    /// Performs complete card initialization including host initialization,
+    /// card detection, and card identification.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - Base address of the MCI controller registers
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if initialization succeeds, or an error if:
+    /// - Card detection fails
+    /// - Card initialization fails
+    /// - Host initialization fails
     pub fn init(&mut self, addr: NonNull<u8>) -> MCIHostStatus {
         debug!("sd card initializing");
 
@@ -233,7 +361,7 @@ impl SdCard {
         }
 
         info!("SD init finished, error = {:?}", status);
-        return status;
+        status
     }
 
     fn deinit(&self) -> MCIHostStatus {
@@ -422,10 +550,10 @@ impl SdCard {
 
             /* check if card support 1.8V */
             if self.flags.contains(SdCardFlag::SupportVoltage180v) {
-                if let Some(io_voltage) = self.usr_param.io_voltage.as_ref() {
-                    if io_voltage.typ() == SdIoVoltageCtrlType::NotSupport {
-                        break;
-                    }
+                if let Some(io_voltage) = self.usr_param.io_voltage.as_ref()
+                    && io_voltage.typ() == SdIoVoltageCtrlType::NotSupport
+                {
+                    break;
                 }
 
                 match self.voltage_switch(MCIHostOperationVoltage::Voltage180V) {
@@ -481,11 +609,11 @@ impl SdCard {
     fn host_init(&mut self, addr: NonNull<u8>) -> MCIHostStatus {
         info!("host init");
         let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
-        if !self.base.is_host_ready {
-            if let Err(err) = host.dev.init(addr, host) {
-                info!("SD host driver init failed, error = {:?}", err);
-                return Err(MCIHostError::Fail);
-            }
+        if !self.base.is_host_ready
+            && let Err(err) = host.dev.init(addr, host)
+        {
+            info!("SD host driver init failed, error = {:?}", err);
+            return Err(MCIHostError::Fail);
         }
 
         let cd = self
@@ -526,12 +654,10 @@ impl SdCard {
             } else {
                 self.usr_param.power_on_delay_ms
             }
+        } else if self.usr_param.power_off_delay_ms == 0 {
+            SD_POWER_OFF_DELAY_MS
         } else {
-            if self.usr_param.power_off_delay_ms == 0 {
-                SD_POWER_OFF_DELAY_MS
-            } else {
-                self.usr_param.power_off_delay_ms
-            }
+            self.usr_param.power_off_delay_ms
         };
 
         sleep(Duration::from_millis(power_delay as u64));
@@ -563,7 +689,7 @@ impl SdCard {
             }
         } else {
             /* mostly advanced host not detect card by gpio, therefore follow this branch */
-            if self.base.is_host_ready == false {
+            if !self.base.is_host_ready {
                 info!("SD host not ready !!!");
                 return Err(MCIHostError::Fail);
             }
@@ -630,7 +756,11 @@ impl SdCard {
         content.set_data(Some(data));
 
         let result = self.transfer(&mut content, 3);
-        let response = content.cmd().unwrap().response();
+        let response = if let Some(cmd) = content.cmd() {
+            cmd.response()
+        } else {
+            return result;
+        };
         debug!("in write successful blk send response is {:?}", response);
         if result.is_err() || response[0] & MCIHostCardStatusFlag::ALL_ERROR_FLAG.bits() != 0 {
             error!(
@@ -671,6 +801,7 @@ impl SdCard {
             }
         } else {
             /* card is in UHS_I mode */
+            #[allow(clippy::never_loop)]
             loop {
                 if self.current_timing == SdTimingMode::SDR12DefaultMode {
                     /* if timing not specified, probe card capability from SDR104 mode */
@@ -811,7 +942,7 @@ impl SdCard {
 
         /* check if function is support */
         if (func_group_info[group as usize] & (1 << (func as u16)) == 0)
-            || (((current_func_status >> (group as u32) * 4) & 0xf) != (func as u32))
+            || (((current_func_status >> ((group as u32) * 4)) & 0xf) != (func as u32))
         {
             info!(
                 "\r\nError: function {} in group {} not support\r\n",
@@ -842,7 +973,7 @@ impl SdCard {
         */
         let current_func_status = ((func_status[3] & 0xff) << 8) | (func_status[4] >> 24);
 
-        if ((current_func_status >> (group as u32) * 4) & 0xf) != (func as u32) {
+        if ((current_func_status >> ((group as u32) * 4)) & 0xf) != (func as u32) {
             info!("\r\nError: switch to function {} failed\r\n", func as u32);
             return Err(MCIHostError::SwitchFailed);
         }
@@ -879,9 +1010,9 @@ impl SdCard {
             }
 
             /*
-             * todo 此处申请once_buffer，在数据量较大的情况下可能会带来不小的性能开销
-             * 但Rust并不能像C语言一样那么灵活的使用指针，否则可能会带来大量unsafe代码
-             * 这里折中使用申请内存+extend的方法来处理数据
+             * todo Allocating once_buffer here may bring significant performance overhead when data volume is large
+             * But Rust cannot use pointers as flexibly as C, otherwise it may bring a lot of unsafe code
+             * Here we compromise by using memory allocation + extend method to handle data
              */
             let len = block_count_one_time * MCI_HOST_DEFAULT_BLOCK_SIZE / 4;
             let mut once_buffer = vec![0u32; len as usize];
@@ -903,15 +1034,31 @@ impl SdCard {
         Ok(())
     }
 
+    /// Writes multiple blocks to the SD card
+    ///
+    /// Writes the specified number of blocks starting from the given block address.
+    /// Automatically handles splitting large transfers into multiple transactions.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - Data buffer containing blocks to write (in u32 words)
+    /// * `start_block` - Starting block number (0-based)
+    /// * `block_count` - Number of blocks to write
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if write succeeds, or an error if:
+    /// - Host is not ready
+    /// - Transfer fails
     pub fn write_blocks(
         &mut self,
-        buffer: &mut Vec<u32>,
+        buffer: &mut [u32],
         start_block: u32,
         block_count: u32,
     ) -> MCIHostStatus {
         let mut block_left = block_count;
         let mut block_count_one_time: u32;
-        let mut block_written_one_time = 0; // 一次写操作写成功的块数
+        let mut block_written_one_time = 0; // Number of blocks successfully written in one write operation
 
         while block_left != 0 {
             let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
@@ -962,8 +1109,8 @@ impl SdCard {
         }
 
         if !self.flags.contains(SdCardFlag::SupportHighCapacity) {
-            erase_block_start = erase_block_start * MCI_HOST_DEFAULT_BLOCK_SIZE;
-            erase_block_end = erase_block_end * MCI_HOST_DEFAULT_BLOCK_SIZE;
+            erase_block_start *= MCI_HOST_DEFAULT_BLOCK_SIZE;
+            erase_block_end *= MCI_HOST_DEFAULT_BLOCK_SIZE;
         }
 
         // Send ERASE_WRITE_BLOCK_START command to set the start block number to erase
@@ -1062,7 +1209,7 @@ impl SdCard {
     }
 }
 
-/// SDIO规范CMD指令
+/// SDIO specification CMD commands
 impl SdCard {
     /// CMD 0
     fn go_idle(&self) -> MCIHostStatus {
@@ -1127,7 +1274,7 @@ impl SdCard {
         let rx_buf = match PoolBuffer::new(64 * size_of::<u32>(), size_of::<u32>()) {
             Err(e) => panic!("CMD6 allocate rx_buf failed, err {:?}", e),
             Ok(buf) => {
-                warn!(
+                debug!(
                     "CMD6: alloc rx_buf at {:p}, size {}",
                     buf.addr().as_ptr(),
                     buf.size()
@@ -1310,7 +1457,7 @@ impl SdCard {
         /* Gate for 10ms, even though spec requires 5 */
         sleep(Duration::from_millis(10));
 
-        /* 重新获取 host 实例 */
+        /* Re-acquire host instance */
         let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
 
         /* Restart the clock */
@@ -1421,7 +1568,7 @@ impl SdCard {
                 let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
                 block_size > host.max_block_size
             })
-            || (block_size % 4 != 0)
+            || (!block_size.is_multiple_of(4))
         {
             info!(
                 "\r\nError: read with parameter, block size {} is not support\r\n",
@@ -1440,7 +1587,7 @@ impl SdCard {
 
         let mut command = MCIHostCmd::new();
 
-        info!(
+        debug!(
             "read block(s), block_size = {}, block_count = {}",
             block_size, block_count
         );
@@ -1471,7 +1618,7 @@ impl SdCard {
         let rx_buf = match PoolBuffer::new(len as usize, block_size as usize) {
             Err(e) => panic!("CMD17/18 allocate rx_buf failed, err {:?}", e),
             Ok(buf) => {
-                warn!(
+                debug!(
                     "CMD17/18: alloc rx_buf at {:p}, size {}",
                     buf.addr().as_ptr(),
                     buf.size()
@@ -1486,9 +1633,7 @@ impl SdCard {
         context.set_cmd(Some(command));
         context.set_data(Some(data));
 
-        if let Err(err) = self.transfer(&mut context, 3) {
-            return Err(err);
-        }
+        self.transfer(&mut context, 3)?;
 
         let data = context.data_mut().unwrap();
         let rx_data = data.rx_data().unwrap();
@@ -1522,7 +1667,7 @@ impl SdCard {
     /// CMD 24/25
     pub fn write(
         &mut self,
-        buffer: &mut Vec<u32>,
+        buffer: &mut [u32],
         start_block: u32,
         block_size: u32,
         block_count: u32,
@@ -1534,7 +1679,7 @@ impl SdCard {
                 let host = self.base.host.as_ref().ok_or(MCIHostError::HostNotReady)?;
                 block_size > host.max_block_size
             })
-            || (block_size % 4 != 0)
+            || (!block_size.is_multiple_of(4))
         {
             error!(
                 "\r\nError: write with parameter, block size {} is not support\r\n",
@@ -1706,7 +1851,7 @@ impl SdCard {
         data.block_size_set(64);
         data.block_count_set(1);
         let rx_buf = PoolBuffer::new(64, 64).unwrap();
-        data.rx_data_set(Some(rx_buf.to_vec::<u32>().unwrap())); // todo 减少内存分配
+        data.rx_data_set(Some(rx_buf.to_vec::<u32>().unwrap())); // todo Reduce memory allocation
 
         let mut content = MCIHostTransfer::new();
         content.set_data(Some(data));
@@ -1831,10 +1976,10 @@ impl SdCard {
         data.block_size_set(8);
         data.block_count_set(1);
         // We implemented 'Drop' for PoolBuffer, so we don't need to dealloc this rx_buf
-        let rx_buf = match PoolBuffer::new(8 * size_of::<u32>(), size_of::<u32>()) {
+        let rx_buf = match PoolBuffer::new(u32::BITS as usize, size_of::<u32>()) {
             Err(e) => panic!("ACMD51 allocate rx_buf failed, err {:?}", e),
             Ok(buf) => {
-                warn!(
+                debug!(
                     "ACMD51: alloc rx_buf at {:p}, size {}",
                     buf.addr().as_ptr(),
                     buf.size()
@@ -1867,7 +2012,7 @@ impl SdCard {
         );
 
         /* decode scr */
-        self.decode_scr(&raw_src);
+        self.decode_scr(raw_src);
 
         Ok(())
     }
@@ -1946,9 +2091,9 @@ impl SdCard {
             self.block_count = (csd.device_size + 1) << (csd.device_size_multiplier + 2);
             self.base.block_size = 1 << csd.read_block_length;
             if self.base.block_size > MCI_HOST_DEFAULT_BLOCK_SIZE {
-                self.block_count = self.block_count * self.base.block_size;
+                self.block_count *= self.base.block_size;
                 self.base.block_size = MCI_HOST_DEFAULT_BLOCK_SIZE;
-                self.block_count = self.block_count / self.base.block_size;
+                self.block_count /= self.base.block_size;
             }
         } else if csd.csd_structure == 1 {
             info!("   csd structure: 2.0");
@@ -2001,7 +2146,7 @@ impl SdCard {
         );
     }
 
-    fn decode_scr(&mut self, rawscr: &Vec<u32>) {
+    fn decode_scr(&mut self, rawscr: &[u32]) {
         let scr = &mut self.scr;
 
         scr.scr_structure = ((rawscr[0] & 0xF0000000) >> 28) as u8;
@@ -2051,7 +2196,7 @@ impl SdCard {
         }
     }
 
-    fn decode_status(&mut self, status: &Vec<u32>) {
+    fn decode_status(&mut self, status: &[u32]) {
         self.stat.bus_width = ((status[0] & 0xC0000000) >> 30) as u8; /* 511-510 */
         self.stat.secure_mode = ((status[0] & 0x20000000) >> 29) as u8; /* 509 */
         self.stat.card_type = (status[0] & 0x0000FFFF) as u16; /* 495-480 */
@@ -2069,6 +2214,16 @@ impl SdCard {
 }
 
 impl SdCard {
+    /// Returns the block count of the SD card
+    pub fn block_count(&self) -> u32 {
+        self.block_count
+    }
+
+    /// Returns the block size of the SD card
+    pub fn block_size(&self) -> u32 {
+        self.base.block_size
+    }
+
     fn card_dump(&self) {
         let mut card_name = [0u8; SD_PRODUCT_NAME_BYTES];
         card_name.copy_from_slice(self.cid.product_name.as_slice());

@@ -2,31 +2,31 @@ use bitflags::bitflags;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostCmdType {
-    Normal = 0,  // 普通命令
-    Suspend = 1, // 挂起命令
-    Resume = 2,  // 恢复命令
-    Abort = 3,   // 中止命令
-    Empty = 4,   // 空命令
+    Normal = 0,  // Normal command
+    Suspend = 1, // Suspend command
+    Resume = 2,  // Resume command
+    Abort = 3,   // Abort command
+    Empty = 4,   // Empty command
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostResponseType {
-    None = 0, // 无响应
-    R1 = 1,   // 响应类型: R1
-    R1b = 2,  // 响应类型: R1b
-    R2 = 3,   // 响应类型: R2
-    R3 = 4,   // 响应类型: R3
-    R4 = 5,   // 响应类型: R4
-    R5 = 6,   // 响应类型: R5
-    R5b = 7,  // 响应类型: R5b
-    R6 = 8,   // 响应类型: R6s
-    R7 = 9,   // 响应类型: R7
+    None = 0, // No response
+    R1 = 1,   // Response type: R1
+    R1b = 2,  // Response type: R1b
+    R2 = 3,   // Response type: R2
+    R3 = 4,   // Response type: R3
+    R4 = 5,   // Response type: R4
+    R5 = 6,   // Response type: R5
+    R5b = 7,  // Response type: R5b
+    R6 = 8,   // Response type: R6s
+    R7 = 9,   // Response type: R7
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostDataPacketFormat {
-    MSBFirst = 0, // 数据包格式: MSB 优先
-    LSBFirst = 1, // 数据包格式: LSB 优先
+    MSBFirst = 0, // Data packet format: MSB first
+    LSBFirst = 1, // Data packet format: LSB first
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

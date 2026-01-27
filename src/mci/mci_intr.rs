@@ -1,3 +1,9 @@
+//! Interrupt handling for MCI operations
+//!
+//! This module provides interrupt service routines and event handling
+//! for the MCI controller, processing command completion, data transfer,
+//! and error events.
+
 use core::ptr::NonNull;
 
 use log::debug;
@@ -13,12 +19,20 @@ use crate::osa::consts::SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS;
 use crate::osa::osa_event_set;
 use crate::sd::reg_base;
 
+use super::MCI;
 use super::consts::*;
 use super::regs::*;
-use super::MCI;
 
 impl MCI {
-    /* Get SDIF controller interrupt mask */
+    /// Gets the SDIF controller interrupt mask
+    ///
+    /// # Arguments
+    ///
+    /// * `tp` - Interrupt type (General or DMA)
+    ///
+    /// # Returns
+    ///
+    /// The current interrupt mask value
     pub fn interrupt_mask_get(&self, tp: MCIIntrType) -> u32 {
         let reg = self.config.reg();
         let mut mask = 0;
@@ -30,7 +44,13 @@ impl MCI {
         mask
     }
 
-    /* Enable/Disable SDIF controller interrupt */
+    /// Enables or disables SDIF controller interrupts
+    ///
+    /// # Arguments
+    ///
+    /// * `tp` - Interrupt type (General or DMA)
+    /// * `set_mask` - Interrupt mask bits to modify
+    /// * `enable` - True to enable interrupts, false to disable
     pub fn interrupt_mask_set(&self, tp: MCIIntrType, set_mask: u32, enable: bool) {
         let mut mask = self.interrupt_mask_get(tp);
         if enable {
@@ -48,6 +68,9 @@ impl MCI {
 }
 
 /// Interrupt handler for SDIF instance
+///
+/// Processes all pending interrupts from the MCI controller, including
+/// command completion, data transfer completion, and error conditions.
 pub fn fsdif_interrupt_handler() {
     let reg = MCIReg::new(reg_base());
 
@@ -81,7 +104,7 @@ pub fn fsdif_interrupt_handler() {
     }
 
     // handle card detect event
-    // todo 尚未实现卡检测相关事件
+    // todo Card detection related events not yet implemented
     // if events.bits() & event_mask.bits() & MCIRawInts::CD_BIT.bits() != 0 &&
     //     !self.config().non_removable()
     // {
@@ -102,18 +125,16 @@ pub fn fsdif_interrupt_handler() {
         handle_cmd_done();
         handle_data_done(events.bits(), dmac_events.bits());
     } else if events.contains(MCIRawInts::CMD_BIT)
-    // todo 这里无法得到MCI实例 暂时无法处理这种情况
+    // todo Cannot get MCI instance here, temporarily unable to handle this case
     // (events.contains(MCIRawInts::HTO_BIT) && self.cur_cmd_index() == MCI::SWITCH_VOLTAGE as isize)
     {
         handle_cmd_done();
-        return;
     // } else if events.contains(MCIRawInts::CMD_BIT) {
     //     // handle cmd done
     //     handle_cmd_done();
     } else if events.contains(MCIRawInts::DTO_BIT) {
         // handle data done
         handle_data_done(events.bits(), dmac_events.bits());
-        return;
     }
 }
 
@@ -142,7 +163,7 @@ pub fn handle_data_done(status: u32, dmac_status: u32) {
             .bits();
     let check_dmac = dmac_status & (MCIDMACIntEn::AIS | MCIDMACIntEn::DU).bits();
 
-    // todo 这里无法得到MCI实例 暂时无法处理这种情况
+    // todo Cannot get MCI instance here, temporarily unable to handle this case
     // if !dev.whether_transfer_data() {
     //     osa_event_set(SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS);
     // } else if check_status | check_dmac != 0 {
@@ -153,10 +174,8 @@ pub fn handle_data_done(status: u32, dmac_status: u32) {
     //     }
     // }
 
-    if check_status | check_dmac != 0 {
-        if check_status & MCIRawInts::DTO_BIT.bits() != 0 {
-            osa_event_set(SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS);
-        }
+    if check_status | check_dmac != 0 && check_status & MCIRawInts::DTO_BIT.bits() != 0 {
+        osa_event_set(SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS);
     }
 }
 
