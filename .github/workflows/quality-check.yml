@@ -2,12 +2,6 @@ name: Quality Checks
 
 on:
   workflow_call:
-    inputs:
-      targets:
-        description: 'Build targets'
-        required: false
-        type: string
-        default: 'aarch64-unknown-none-softfloat,aarch64-unknown-none'
 
 jobs:
   check:
@@ -16,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        targets: ${{ fromJson(format('[{0}]', inputs.targets)) }}
+        targets: [aarch64-unknown-none-softfloat, aarch64-unknown-none]
 
     steps:
       - name: Checkout code
