@@ -1,42 +1,22 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*'
+      - 'v*-pre.*'
+  pull_request:
 
 jobs:
-  build:
-    name: Build ${{ matrix.targets }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        rust-toolchain: [nightly-2025-08-15]
-        targets: [aarch64-unknown-none-softfloat, aarch64-unknown-none]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust-toolchain }}
-          components: rust-src, clippy, rustfmt
-          targets: ${{ matrix.targets }}
-
-      - name: Check rust version
-        run: rustc --version --verbose
-
-      - name: Check code format
-        run: cargo fmt --all -- --check
-
-      - name: Build
-        run: cargo build --target ${{ matrix.targets }}
-
-      - name: Run clippy
-        run: cargo clippy --target ${{ matrix.targets }} -- -D warnings
+  quality-check:
+    uses: ./.github/workflows/quality-check.yml
 
   doc:
     name: Build and deploy documentation
     runs-on: ubuntu-latest
+    needs: quality-check
     permissions:
       contents: write
     steps:
