@@ -3,8 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'              # main branch: stable release (e.g. v0.1.0)
-      - 'v*-pre.*'        # dev branch: prerelease (e.g. v0.2.0-pre.1)
+      - 'v*'
+      - 'v*-pre.*'
 
 permissions:
   contents: write
@@ -17,6 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         targets: [aarch64-unknown-none-softfloat, aarch64-unknown-none]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,43 +45,53 @@ jobs:
         run: cargo doc --no-deps --target ${{ matrix.targets }}
 
   create-release:
-    name: Create Release
+    name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: check
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate branch and tag
+      - name: Validate tag and branch (HEAD-based)
+        shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          # Find which branch contains this tag
-          BRANCH=$(git branch -r --contains tags/$TAG | grep -E 'origin/(main|dev)$' | sed 's|origin/||' | head -n 1)
+          set -e
 
-          if [ -z "$BRANCH" ]; then
-            echo "Error: Tag $TAG not found on main or dev branch"
-            exit 1
-          fi
+          TAG="${{ github.ref_name }}"
+          TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+
+          git fetch origin main dev
+
+          MAIN_HEAD=$(git rev-parse origin/main)
+          DEV_HEAD=$(git rev-parse origin/dev)
+
+          echo "Tag:        $TAG"
+          echo "Tag commit: $TAG_COMMIT"
+          echo "main HEAD:  $MAIN_HEAD"
+          echo "dev  HEAD:  $DEV_HEAD"
 
           if [[ "$TAG" == *-pre.* ]]; then
-            if [ "$BRANCH" != "dev" ]; then
-              echo "Error: Prerelease tag $TAG must be on dev branch, but found on $BRANCH"
+            if [ "$TAG_COMMIT" != "$DEV_HEAD" ]; then
+              echo "❌ prerelease tag must be created from dev HEAD"
               exit 1
             fi
+            echo "✅ prerelease tag validated on dev"
           else
-            if [ "$BRANCH" != "main" ]; then
-              echo "Error: Stable release tag $TAG must be on main branch, but found on $BRANCH"
+            if [ "$TAG_COMMIT" != "$MAIN_HEAD" ]; then
+              echo "❌ stable release tag must be created from main HEAD"
               exit 1
             fi
+            echo "✅ stable release tag validated on main"
           fi
-          echo "Branch validation passed: $BRANCH"
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-pre') }}
+          prerelease: ${{ contains(github.ref_name, '-pre.') }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,34 +100,44 @@ jobs:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     needs: check
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate branch and tag
+      - name: Validate tag and branch (HEAD-based)
+        shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          # Find which branch contains this tag
-          BRANCH=$(git branch -r --contains tags/$TAG | grep -E 'origin/(main|dev)$' | sed 's|origin/||' | head -n 1)
+          set -e
 
-          if [ -z "$BRANCH" ]; then
-            echo "Error: Tag $TAG not found on main or dev branch"
-            exit 1
-          fi
+          TAG="${{ github.ref_name }}"
+          TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+
+          git fetch origin main dev
+
+          MAIN_HEAD=$(git rev-parse origin/main)
+          DEV_HEAD=$(git rev-parse origin/dev)
+
+          echo "Tag:        $TAG"
+          echo "Tag commit: $TAG_COMMIT"
+          echo "main HEAD:  $MAIN_HEAD"
+          echo "dev  HEAD:  $DEV_HEAD"
 
           if [[ "$TAG" == *-pre.* ]]; then
-            if [ "$BRANCH" != "dev" ]; then
-              echo "Error: Prerelease tag $TAG must be on dev branch, but found on $BRANCH"
+            if [ "$TAG_COMMIT" != "$DEV_HEAD" ]; then
+              echo "❌ prerelease tag must be created from dev HEAD"
               exit 1
             fi
+            echo "✅ prerelease tag validated on dev"
           else
-            if [ "$BRANCH" != "main" ]; then
-              echo "Error: Stable release tag $TAG must be on main branch, but found on $BRANCH"
+            if [ "$TAG_COMMIT" != "$MAIN_HEAD" ]; then
+              echo "❌ stable release tag must be created from main HEAD"
               exit 1
             fi
+            echo "✅ stable release tag validated on main"
           fi
-          echo "Branch validation passed: $BRANCH"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
