@@ -49,19 +49,28 @@ jobs:
     needs: check
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate branch and tag
         run: |
-          BRANCH=$(git branch --show-current)
           TAG="${{ github.ref_name }}"
+          # Find which branch contains this tag
+          BRANCH=$(git branch -r --contains tags/$TAG | grep -E 'origin/(main|dev)$' | sed 's|origin/||' | head -n 1)
+
+          if [ -z "$BRANCH" ]; then
+            echo "Error: Tag $TAG not found on main or dev branch"
+            exit 1
+          fi
+
           if [[ "$TAG" == *-pre.* ]]; then
             if [ "$BRANCH" != "dev" ]; then
-              echo "Error: Prerelease tags must be on dev branch, but current branch is $BRANCH"
+              echo "Error: Prerelease tag $TAG must be on dev branch, but found on $BRANCH"
               exit 1
             fi
           else
             if [ "$BRANCH" != "main" ]; then
-              echo "Error: Stable release tags must be on main branch, but current branch is $BRANCH"
+              echo "Error: Stable release tag $TAG must be on main branch, but found on $BRANCH"
               exit 1
             fi
           fi
@@ -82,19 +91,28 @@ jobs:
     needs: check
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate branch and tag
         run: |
-          BRANCH=$(git branch --show-current)
           TAG="${{ github.ref_name }}"
+          # Find which branch contains this tag
+          BRANCH=$(git branch -r --contains tags/$TAG | grep -E 'origin/(main|dev)$' | sed 's|origin/||' | head -n 1)
+
+          if [ -z "$BRANCH" ]; then
+            echo "Error: Tag $TAG not found on main or dev branch"
+            exit 1
+          fi
+
           if [[ "$TAG" == *-pre.* ]]; then
             if [ "$BRANCH" != "dev" ]; then
-              echo "Error: Prerelease tags must be on dev branch, but current branch is $BRANCH"
+              echo "Error: Prerelease tag $TAG must be on dev branch, but found on $BRANCH"
               exit 1
             fi
           else
             if [ "$BRANCH" != "main" ]; then
-              echo "Error: Stable release tags must be on main branch, but current branch is $BRANCH"
+              echo "Error: Stable release tag $TAG must be on main branch, but found on $BRANCH"
               exit 1
             fi
           fi
@@ -106,4 +124,4 @@ jobs:
           toolchain: nightly-2025-08-15
 
       - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --dry-run --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
