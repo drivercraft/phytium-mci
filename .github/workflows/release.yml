@@ -3,15 +3,15 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-      - 'v*-pre.*'
+      - 'v*.*.*'
+      - 'v*.*.*-pre.*'
 
 permissions:
   contents: write
 
 jobs:
   check:
-    uses: ./.github/workflows/quality-check.yml
+    uses: ./.github/workflows/check.yml
 
   create-release:
     name: Create GitHub Release

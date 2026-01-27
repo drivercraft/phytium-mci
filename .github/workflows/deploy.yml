@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   quality-check:
-    uses: ./.github/workflows/quality-check.yml
+    uses: ./.github/workflows/check.yml
 
   build-doc:
     name: Build documentation
