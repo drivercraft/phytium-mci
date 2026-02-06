@@ -459,7 +459,12 @@ impl MCIHostDevice for SDIFDev {
                 return Err(MCIHostError::NoData);
             }
             #[cfg(feature = "pio")]
-            if self.hc.borrow_mut().poll_wait_pio_end(&mut cmd_data).is_err() {
+            if self
+                .hc
+                .borrow_mut()
+                .poll_wait_pio_end(&mut cmd_data)
+                .is_err()
+            {
                 return Err(MCIHostError::NoData);
             }
         }
@@ -471,7 +476,12 @@ impl MCIHostDevice for SDIFDev {
             cmd_data.flag()
         );
 
-        if self.hc.borrow_mut().cmd_response_get(&mut cmd_data).is_err() {
+        if self
+            .hc
+            .borrow_mut()
+            .cmd_response_get(&mut cmd_data)
+            .is_err()
+        {
             info!("Transfer cmd and data failed !!!");
             return Err(MCIHostError::Timeout);
         }
