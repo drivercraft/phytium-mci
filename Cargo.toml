@@ -1,6 +1,6 @@
 [package]
 name = "phytium-mci"
-version = "0.1.0-pre.0"
+version = "0.2.0-pre.0"
 edition = "2024"
 description = "A no_std Rust driver for SD/MMC cards on Phytium E2000 series SoCs"
 authors = ["周睿 <zrufo747@outlook.com>"]
