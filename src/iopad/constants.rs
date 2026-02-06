@@ -41,9 +41,9 @@ impl From<u32> for FioPadFunc {
     }
 }
 
-impl Into<u32> for FioPadFunc {
-    fn into(self) -> u32 {
-        match self {
+impl From<FioPadFunc> for u32 {
+    fn from(val: FioPadFunc) -> Self {
+        match val {
             FioPadFunc::Func0 => 0b000,
             FioPadFunc::Func1 => 0b001,
             FioPadFunc::Func2 => 0b010,
@@ -107,9 +107,9 @@ impl From<u32> for FioPadDrive {
     }
 }
 
-impl Into<u32> for FioPadDrive {
-    fn into(self) -> u32 {
-        match self {
+impl From<FioPadDrive> for u32 {
+    fn from(val: FioPadDrive) -> Self {
+        match val {
             FioPadDrive::Drv0 => 0b0000,
             FioPadDrive::Drv1 => 0b0001,
             FioPadDrive::Drv2 => 0b0010,
@@ -156,9 +156,9 @@ impl From<u32> for FioPadPull {
     }
 }
 
-impl Into<u32> for FioPadPull {
-    fn into(self) -> u32 {
-        match self {
+impl From<FioPadPull> for u32 {
+    fn from(val: FioPadPull) -> Self {
+        match val {
             FioPadPull::PullNone => 0b00,
             FioPadPull::PullDown => 0b01,
             FioPadPull::PullUp => 0b10,
@@ -169,24 +169,15 @@ impl Into<u32> for FioPadPull {
 
 impl FioPadPull {
     pub fn is_pull_none(&self) -> bool {
-        match self {
-            FioPadPull::PullNone => true,
-            _ => false,
-        }
+        matches!(self, FioPadPull::PullNone)
     }
 
     pub fn is_pull_down(&self) -> bool {
-        match self {
-            FioPadPull::PullDown => true,
-            _ => false,
-        }
+        matches!(self, FioPadPull::PullDown)
     }
 
     pub fn is_pull_up(&self) -> bool {
-        match self {
-            FioPadPull::PullUp => true,
-            _ => false,
-        }
+        matches!(self, FioPadPull::PullUp)
     }
 }
 
@@ -248,9 +239,9 @@ impl From<u32> for FioPadDelay {
     }
 }
 
-impl Into<u32> for FioPadDelay {
-    fn into(self) -> u32 {
-        match self {
+impl From<FioPadDelay> for u32 {
+    fn from(val: FioPadDelay) -> Self {
+        match val {
             FioPadDelay::DelayNone => 0,
             FioPadDelay::Delay1 => 1,
             FioPadDelay::Delay2 => 2,

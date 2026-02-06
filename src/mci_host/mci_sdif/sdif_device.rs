@@ -22,9 +22,6 @@ use crate::mci_host::mci_host_config::*;
 use crate::mci_host::mci_host_device::MCIHostDevice;
 use crate::mci_host::mci_host_transfer::MCIHostTransfer;
 use crate::mci_host::sd::constants::SdCmd;
-use crate::osa::osa_alloc_aligned;
-use crate::osa::pool_buffer::PoolBuffer;
-use crate::sd::constants::SD_BLOCK_SIZE;
 use crate::tools::swap_half_word_byte_sequence_u32;
 use crate::{IoPad, sleep};
 
@@ -97,7 +94,7 @@ impl MCIHostDevice for SDIFDev {
             .restart()
             .unwrap_or_else(|e| error!("restart failed: {:?}", e));
 
-        if let Err(_) = self.hc.borrow_mut().config_init(&mci_config) {
+        if self.hc.borrow_mut().config_init(&mci_config).is_err() {
             info!("Sdio ctrl init failed.");
             return Err(MCIHostError::Fail);
         }
@@ -184,6 +181,7 @@ impl MCIHostDevice for SDIFDev {
         !self.hc.borrow().check_if_card_busy()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn convert_data_to_little_endian(
         &self,
         data: &mut Vec<u32>,
@@ -194,21 +192,18 @@ impl MCIHostDevice for SDIFDev {
         if host.config.endian_mode == MCIHostEndianMode::Little
             && format == MCIHostDataPacketFormat::MSBFirst
         {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = val.swap_bytes();
+            for val in data.iter_mut().take(word_size) {
+                *val = val.swap_bytes();
             }
         } else if host.config.endian_mode == MCIHostEndianMode::HalfWordBig {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = swap_half_word_byte_sequence_u32(val);
+            for val in data.iter_mut().take(word_size) {
+                *val = swap_half_word_byte_sequence_u32(*val);
             }
         } else if host.config.endian_mode == MCIHostEndianMode::Big
             && format == MCIHostDataPacketFormat::LSBFirst
         {
-            for i in 0..word_size {
-                let val = data[i];
-                data[i] = val.swap_bytes();
+            for val in data.iter_mut().take(word_size) {
+                *val = val.swap_bytes();
             }
         }
         Ok(())
@@ -460,11 +455,11 @@ impl MCIHostDevice for SDIFDev {
             }
         } else {
             #[cfg(feature = "pio")]
-            if let Err(_) = self.hc.borrow_mut().pio_transfer(&mut cmd_data) {
+            if self.hc.borrow_mut().pio_transfer(&mut cmd_data).is_err() {
                 return Err(MCIHostError::NoData);
             }
             #[cfg(feature = "pio")]
-            if let Err(_) = self.hc.borrow_mut().poll_wait_pio_end(&mut cmd_data) {
+            if self.hc.borrow_mut().poll_wait_pio_end(&mut cmd_data).is_err() {
                 return Err(MCIHostError::NoData);
             }
         }
@@ -476,13 +471,13 @@ impl MCIHostDevice for SDIFDev {
             cmd_data.flag()
         );
 
-        if let Err(_) = self.hc.borrow_mut().cmd_response_get(&mut cmd_data) {
+        if self.hc.borrow_mut().cmd_response_get(&mut cmd_data).is_err() {
             info!("Transfer cmd and data failed !!!");
             return Err(MCIHostError::Timeout);
         }
 
         // TODO: The `CLONE` here will reduce driver speed, need to solve this performance issue - taking it out directly might be better
-        if let Some(_) = content.data() {
+        if content.data().is_some() {
             let data = cmd_data.get_data().unwrap();
             unsafe {
                 invalidate(
@@ -490,18 +485,18 @@ impl MCIHostDevice for SDIFDev {
                     data.buf().unwrap().len() * 4,
                 );
             }
-            if let Some(rx_data) = data.buf() {
-                if let Some(in_data) = content.data_mut() {
-                    in_data.rx_data_set(Some(rx_data.clone()));
-                }
+            if let Some(rx_data) = data.buf()
+                && let Some(in_data) = content.data_mut()
+            {
+                in_data.rx_data_set(Some(rx_data.clone()));
             }
         }
 
-        if let Some(cmd) = content.cmd_mut() {
-            if cmd.response_type() != MCIHostResponseType::None {
-                cmd.response_mut()
-                    .copy_from_slice(&cmd_data.get_response()[..4]);
-            }
+        if let Some(cmd) = content.cmd_mut()
+            && cmd.response_type() != MCIHostResponseType::None
+        {
+            cmd.response_mut()
+                .copy_from_slice(&cmd_data.get_response()[..4]);
         }
 
         trace!("Transfer completed successfully");

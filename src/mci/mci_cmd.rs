@@ -44,7 +44,7 @@ impl MCI {
         Ok(())
     }
 
-    pub(crate) fn cmd_transfer<'a>(&self, cmd_data: &'a MCICmdData) -> MCIResult {
+    pub(crate) fn cmd_transfer(&self, cmd_data: &MCICmdData) -> MCIResult {
         let mut raw_cmd = MCICmd::empty();
         let reg = self.config.reg();
 
@@ -117,16 +117,15 @@ impl MCI {
         }
 
         #[cfg(feature = "pio")]
-        if let Some(data) = cmd_data.get_mut_data() {
-            if read {
-                if MCITransMode::PIO == self.config.trans_mode() {
-                    self.pio_read_data(data)?;
-                }
-            }
+        if let Some(data) = cmd_data.get_mut_data()
+            && read
+            && MCITransMode::PIO == self.config.trans_mode()
+        {
+            self.pio_read_data(data)?;
         }
 
         /* check response of cmd */
-        let flag = cmd_data.flag().clone();
+        let flag = *cmd_data.flag();
         let reg = self.config.reg();
         if flag.contains(MCICmdFlag::EXP_RESP) {
             let response = cmd_data.get_mut_response();

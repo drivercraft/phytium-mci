@@ -15,6 +15,7 @@ pub fn swap_word_byte_sequence_u32(value: u32) -> u32 {
         | ((value & 0xFF000000) >> 24)
 }
 
+#[allow(dead_code)]
 pub fn realign_vec(input: Vec<u32>, align: usize) -> Result<Vec<u32>, &'static str> {
     let element_count = input.len();
     let size_bytes = element_count * core::mem::size_of::<u32>();
@@ -73,6 +74,7 @@ pub fn realign_vec(input: Vec<u32>, align: usize) -> Result<Vec<u32>, &'static s
     Ok(aligned_vec)
 }
 
+#[allow(dead_code)]
 pub fn realign_vec_inplace(input: &mut Vec<u32>, align: usize) -> Result<(), &'static str> {
     let old_addr = input.as_ptr() as usize;
 

@@ -13,6 +13,7 @@
 use bitflags::bitflags;
 
 /// SD bus timing mode enumeration.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdTimingMode {
     /// SDR12 default mode (25 MHz at 3.3V, 12.5 MHz at 1.8V)

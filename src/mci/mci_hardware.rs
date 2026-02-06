@@ -109,14 +109,14 @@ impl MCI {
         }
 
         /* for fifo reset, need to check if fifo empty */
-        if reset_bits.contains(MCICtrl::FIFO_RESET) {
-            if let Err(e) = reg.retry_for(
+        if reset_bits.contains(MCICtrl::FIFO_RESET)
+            && let Err(e) = reg.retry_for(
                 |reg: MCIStatus| reg.contains(MCIStatus::FIFO_EMPTY),
                 Some(RETRIES_TIMEOUT),
-            ) {
-                error!("Fifo not empty!");
-                return Err(e);
-            }
+            )
+        {
+            error!("Fifo not empty!");
+            return Err(e);
         }
         Ok(())
     }

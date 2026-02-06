@@ -16,7 +16,7 @@
 //! - **mci_data**: Data transfer structures
 //! - **mci_dma**: DMA transfer support (feature-gated)
 //! - **mci_config**: Configuration structures
-
+//!
 //! Note: Submodules with duplicate names should not be marked as pub
 pub mod constants;
 pub mod err;
@@ -36,7 +36,6 @@ mod mci_timing;
 
 pub use err::*;
 
-use alloc::vec::Vec;
 use constants::*;
 #[cfg(feature = "dma")]
 use dma_api::DSlice;
@@ -51,7 +50,7 @@ pub use mci_cmddata::*;
 pub use mci_config::*;
 pub use mci_timing::*;
 
-use crate::{IoPad, osa::pool_buffer::PoolBuffer, regs::*, sleep};
+use crate::{IoPad, regs::*, sleep};
 use core::time::Duration;
 
 /// MCI (Memory Card Interface) controller driver.
@@ -157,7 +156,7 @@ impl MCI {
         if *config != self.config {
             self.config = config.clone();
         }
-        if let Ok(_) = self.reset() {
+        if self.reset().is_ok() {
             self.is_ready = true;
             info!("Device initialize success !!!");
         }
@@ -283,7 +282,7 @@ impl MCI {
             self.clock_set(false);
 
             /* update clock for clock source */
-            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)
             } else {
                 self.private_cmd_send(reg_val, 0)
@@ -305,7 +304,7 @@ impl MCI {
             self.clock_set(true);
 
             /* update clock for clock divider */
-            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
                 self.private_cmd_send(reg_val, 0)?;
@@ -316,7 +315,7 @@ impl MCI {
             /* close bus clock in case target clock is 0 */
             self.clock_set(false);
 
-            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
                 self.private_cmd_send(reg_val, 0)?;
@@ -526,7 +525,7 @@ impl MCI {
             }
 
             /* set transfer data length and block size */
-            self.trans_bytes_set(data.datalen() as u32);
+            self.trans_bytes_set(data.datalen());
             self.blksize_set(data.blksz());
 
             /* if need to write, write to fifo before send command */
@@ -639,7 +638,7 @@ impl MCI {
     ///
     /// Returns an error if the device is not initialized or reset operations fail.
     pub fn restart(&self) -> MCIResult {
-        if false == self.is_ready {
+        if !self.is_ready {
             error!("Device is not yet initialized!!!");
             return Err(MCIError::NotInit);
         }
@@ -823,7 +822,7 @@ impl MCI {
         let busy_bits = MCIStatus::DATA_BUSY | MCIStatus::DATA_STATE_MC_BUSY;
         let reg = self.config.reg();
         let reg_val = reg.read_reg::<MCIStatus>();
-        if reg_val.contains(busy_bits.clone()) {
+        if reg_val.contains(busy_bits) {
             warn!("Card is busy, waiting ...");
         }
         if let Err(err) = reg.retry_for(

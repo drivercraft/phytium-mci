@@ -39,6 +39,12 @@ pub struct MCITiming {
     pad_delay: MCIPadDelay,
 }
 
+impl Default for MCITiming {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MCITiming {
     /// Create a new default timing configuration.
     pub fn new() -> Self {
@@ -185,13 +191,13 @@ type Fsdif1SdCclkOutDelay = J53Reg1;
 /// * `coarse_delay` - Coarse delay value
 /// * `fine_delay` - Fine delay value
 /// * `enable` - Whether to enable the delay
-fn apply_delay_settings<T: XReg1 + BitsOps>(
+fn apply_delay_settings<T>(
     iopad: &mut IoPad,
     coarse_delay: FioPadDelay,
     fine_delay: FioPadDelay,
     enable: bool,
 ) where
-    T: 'static,
+    T: XReg1 + BitsOps + 'static,
 {
     iopad.delay_set::<T>(
         FioPadDelayDir::OutputDelay,

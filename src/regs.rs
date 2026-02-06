@@ -58,7 +58,7 @@ macro_rules! get_reg32_bits {
 #[macro_export]
 macro_rules! set_reg32_bits {
     ($reg:expr, $a:expr, $b:expr) => {
-        (($reg << $b) & genmask!($a, $b))
+        ($reg << $b) & genmask!($a, $b)
     };
 }
 
@@ -148,10 +148,6 @@ impl<E: RegError> Reg<E> {
 impl<E: RegError> PartialEq for Reg<E> {
     fn eq(&self, other: &Self) -> bool {
         self.addr == other.addr
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 

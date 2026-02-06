@@ -196,11 +196,11 @@ impl IoPad {
         let func = T::func_get(reg_val);
         let pull = T::pull_get(reg_val);
         let drive = T::drive_get(reg_val);
-        return (
+        (
             FioPadFunc::from(func),
             FioPadPull::from(pull),
             FioPadDrive::from(drive),
-        );
+        )
     }
 
     /// Get the delay setting for a pad.

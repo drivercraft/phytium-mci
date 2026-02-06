@@ -53,6 +53,12 @@ lazy_static! {
         Mutex::new(FMemp::new());
 }
 
+impl<'a> Default for FMemp<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> FMemp<'a> {
     /// Constructor
     pub fn new() -> Self {
@@ -63,8 +69,10 @@ impl<'a> FMemp<'a> {
     }
 
     unsafe fn init(&mut self) {
-        self.tlsf_ptr.insert_free_block(&mut POOL[..]);
-        self.is_ready = true;
+        unsafe {
+            self.tlsf_ptr.insert_free_block(&mut POOL[..]);
+            self.is_ready = true;
+        }
     }
 
     unsafe fn alloc_aligned(
@@ -72,17 +80,21 @@ impl<'a> FMemp<'a> {
         size: usize,
         align: usize,
     ) -> Result<PoolBuffer, FMempError> {
-        let layout = Layout::from_size_align_unchecked(size, align);
-        if let Some(result) = self.tlsf_ptr.allocate(layout) {
-            let buffer = PoolBuffer::new(size, result);
-            Ok(buffer)
-        } else {
-            Err(FMempError::BadMalloc)
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size, align);
+            if let Some(result) = self.tlsf_ptr.allocate(layout) {
+                let buffer = PoolBuffer::new(size, result);
+                Ok(buffer)
+            } else {
+                Err(FMempError::BadMalloc)
+            }
         }
     }
 
     unsafe fn dealloc(&mut self, addr: NonNull<u8>, size: usize) {
-        self.tlsf_ptr.deallocate(addr, size);
+        unsafe {
+            self.tlsf_ptr.deallocate(addr, size);
+        }
     }
 }
 

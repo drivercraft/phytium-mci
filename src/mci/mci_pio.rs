@@ -17,8 +17,8 @@ impl MCI {
 
         /* write fifo data */
         reg.write_reg(MCICmd::DAT_WRITE);
-        for i in 0..wr_times {
-            reg.write_reg(MCIDataReg::from_bits_truncate(buf[i]));
+        for &val in buf.iter().take(wr_times) {
+            reg.write_reg(MCIDataReg::from_bits_truncate(val));
         }
         Ok(())
     }

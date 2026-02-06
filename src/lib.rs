@@ -105,7 +105,7 @@ pub(crate) fn sleep(duration: Duration) {
 #[macro_export]
 macro_rules! set_impl {
     ($t: ty) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         unsafe fn _phytium_mci_sleep(duration: Duration) {
             <$t as $crate::Kernel>::sleep(duration)
         }

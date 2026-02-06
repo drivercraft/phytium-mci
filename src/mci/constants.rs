@@ -129,38 +129,66 @@ impl From<u32> for MCIClkSpeed {
     }
 }
 
+/// Data Synchronization Barrier.
+///
+/// # Safety
+///
+/// This function uses inline assembly and must be called safely within an unsafe context.
+/// The caller must ensure that calling this function does not violate memory safety.
 #[inline(always)]
 pub unsafe fn dsb() {
-    core::arch::asm!("dsb sy");
-    core::arch::asm!("isb sy");
+    unsafe {
+        core::arch::asm!("dsb sy");
+        core::arch::asm!("isb sy");
+    }
 }
 
+/// Flushes the data cache for the given address range.
+///
+/// # Safety
+///
+/// The caller must ensure that:
+/// - The address points to valid memory
+/// - The size does not cause the range to overflow
+/// - The memory region is appropriate for cache flushing
 #[inline(always)]
 pub unsafe fn flush(addr: *const u8, size: usize) {
-    let mut addr = addr as usize;
-    let end = addr + size;
-    while addr < end {
-        asm!("dc civac, {0}", in(reg) addr, options(nostack, preserves_flags));
-        addr += 64;
+    unsafe {
+        let mut addr = addr as usize;
+        let end = addr + size;
+        while addr < end {
+            asm!("dc civac, {0}", in(reg) addr, options(nostack, preserves_flags));
+            addr += 64;
+        }
+        dsb();
     }
-    dsb();
 }
 
+/// Invalidates the data cache for the given address range.
+///
+/// # Safety
+///
+/// The caller must ensure that:
+/// - The address points to valid memory
+/// - The size does not cause the range to overflow
+/// - The memory region is appropriate for cache invalidation
 #[inline(always)]
 pub unsafe fn invalidate(addr: *const u8, size: usize) {
-    const CACHE_LINE_SIZE: usize = 64;
+    unsafe {
+        const CACHE_LINE_SIZE: usize = 64;
 
-    let start_addr = (addr as usize) & !(CACHE_LINE_SIZE - 1);
-    let end_addr = (addr as usize + size + CACHE_LINE_SIZE - 1) & !(CACHE_LINE_SIZE - 1);
+        let start_addr = (addr as usize) & !(CACHE_LINE_SIZE - 1);
+        let end_addr = (addr as usize + size + CACHE_LINE_SIZE - 1) & !(CACHE_LINE_SIZE - 1);
 
-    let mut current_addr = start_addr;
-    while current_addr < end_addr {
-        asm!("dc ivac, {0}", in(reg) current_addr, options(nostack, preserves_flags));
-        current_addr += CACHE_LINE_SIZE;
+        let mut current_addr = start_addr;
+        while current_addr < end_addr {
+            asm!("dc ivac, {0}", in(reg) current_addr, options(nostack, preserves_flags));
+            current_addr += CACHE_LINE_SIZE;
+        }
+
+        asm!("dsb sy");
+        asm!("isb");
     }
-
-    asm!("dsb sy");
-    asm!("isb");
 }
 
 /** @name Register Map

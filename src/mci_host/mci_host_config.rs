@@ -92,6 +92,7 @@ impl MCIHostConfig {
 
 /// Host type enumeration.
 #[allow(unused)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostType {
     /// SDMMC host type
@@ -102,6 +103,7 @@ pub(crate) enum MCIHostType {
 
 /// Card type enumeration.
 #[allow(unused)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostCardType {
     /// Standard SD card

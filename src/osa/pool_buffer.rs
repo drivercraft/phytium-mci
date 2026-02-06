@@ -24,7 +24,7 @@ impl PoolBuffer {
 
     /// Construct from `&[T]`
     pub fn copy_from_slice<T: Copy>(&mut self, src: &[T]) -> Result<(), &'static str> {
-        let len = src.len() * size_of::<T>();
+        let len = size_of_val(src);
         if self.size < len {
             return Err("Too small to receive data!");
         }
@@ -40,7 +40,7 @@ impl PoolBuffer {
     /// Construct a `&[T]` from self
     pub fn as_slice<T>(&self) -> Result<&[T], FMempError> {
         let size = size_of::<T>();
-        if self.size() % size != 0 {
+        if !self.size().is_multiple_of(size) {
             return Err(FMempError::SizeNotAligned);
         }
 
@@ -53,7 +53,7 @@ impl PoolBuffer {
     /// Construct a `&mut [T]` from self
     pub fn as_slice_mut<T>(&self) -> Result<&[T], FMempError> {
         let size = size_of::<T>();
-        if self.size() % size != 0 {
+        if !self.size().is_multiple_of(size) {
             return Err(FMempError::SizeNotAligned);
         }
 
@@ -83,7 +83,7 @@ impl PoolBuffer {
 
     /// Get addr
     pub fn addr(&self) -> NonNull<u8> {
-        self.addr.clone()
+        self.addr
     }
 }
 
@@ -93,10 +93,10 @@ impl Drop for PoolBuffer {
     }
 }
 
-impl Into<Vec<u32>> for PoolBuffer {
-    fn into(self) -> Vec<u32> {
+impl From<PoolBuffer> for Vec<u32> {
+    fn from(val: PoolBuffer) -> Self {
         unsafe {
-            let slice = from_raw_parts(self.addr.as_ptr() as *const u32, self.size / 4);
+            let slice = from_raw_parts(val.addr.as_ptr() as *const u32, val.size / 4);
             slice.to_vec()
         }
     }
