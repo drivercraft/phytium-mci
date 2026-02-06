@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-# Only run for the official repository
-if: github.repository_owner == 'drivercraft'
-
 jobs:
   check:
     uses: ./.github/workflows/check.yml
