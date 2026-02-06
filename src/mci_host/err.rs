@@ -1,76 +1,76 @@
-//! Error types for MCI host operations
+//! # MCI Host Error Types
 //!
-//! This module defines comprehensive error types for SD/MMC host operations,
-//! covering command failures, data transfer errors, and card-specific issues.
+//! This module defines error types for MCI host controller operations.
 
-#[allow(unused)]
-/// Errors that can occur during MCI host operations
+/// MCI host controller error enumeration.
 ///
-/// These errors cover all aspects of SD/MMC card operations including
-/// command execution, data transfer, card initialization, and configuration.
+/// This enum represents various error conditions that can occur during
+/// SD/MMC card operations.
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostError {
-    /// General operation failure
+    /// General failure
     Fail,
-    /// Read-only operation attempted on read-only media
+    /// Read-only operation
     ReadOnly,
-    /// Parameter out of valid range
+    /// Out of range
     OutOfRange,
-    /// Invalid argument provided
+    /// Invalid argument
     InvalidArgument,
-    /// Operation timed out
+    /// Operation timeout
     Timeout,
-    /// No transfer in progress to wait for
+    /// No transfer in progress
     NoTransferInProgress,
-    /// Device busy
+    /// Controller busy
     Busy,
     /// No data available
     NoData,
+    // SD/MMC card API's running status.
     /// Feature not yet supported
     NotSupportYet,
-    /// Command/data transfer failed
+    /// Send command failed
     TransferFailed,
-    /// Setting card block size failed
+    /// Set block size failed
     SetCardBlockSizeFailed,
-    /// Host doesn't support this operation
+    /// Host doesn't support feature
     HostNotSupport,
-    /// Card doesn't support this operation
+    /// Card doesn't support feature
     CardNotSupport,
-    /// All Send CID command failed
+    /// Send CID failed
     AllSendCidFailed,
-    /// Send Relative Address command failed
+    /// Send relative address failed
     SendRelativeAddressFailed,
-    /// Send CSD command failed
+    /// Send CSD failed
     SendCsdFailed,
-    /// Select Card command failed
+    /// Select card failed
     SelectCardFailed,
-    /// Send SCR command failed
+    /// Send SCR failed
     SendScrFailed,
-    /// Set data bus width failed
+    /// Set bus width failed
     SetDataBusWidthFailed,
-    /// Go Idle State command failed
+    /// Go idle failed
     GoIdleFailed,
-    /// Handshake Operation Condition failed
+    /// Send Operation Condition failed
     HandShakeOperationConditionFailed,
     /// Send application command failed
     SendApplicationCommandFailed,
-    /// Switch function command failed
+    /// Switch command failed
     SwitchFailed,
-    /// Stop Transmission command failed
+    /// Stop transmission failed
     StopTransmissionFailed,
-    /// Wait for write complete failed
+    /// Wait write complete failed
     WaitWriteCompleteFailed,
     /// Set block count failed
     SetBlockCountFailed,
     /// Set relative address failed
     SetRelativeAddressFailed,
-    /// Switch to high-speed timing failed
+    /// Switch high speed failed
     SwitchBusTimingFailed,
-    /// Send Extended CSD failed
+    /// Send EXT_CSD failed
     SendExtendedCsdFailed,
-    /// Configure boot partition failed
+    /// Configure boot failed
     ConfigureBootFailed,
-    /// Configure Extended CSD failed
+    /// Configure EXT_CSD failed
     ConfigureExtendedCsdFailed,
     /// Enable high capacity erase failed
     EnableHighCapacityEraseFailed,
@@ -82,23 +82,23 @@ pub enum MCIHostError {
     SdioResponseError,
     /// SDIO invalid argument response error
     SdioInvalidArgument,
-    /// SDIO send operation condition failed
+    /// SDIO send operation condition fail
     SdioSendOperationConditionFail,
-    /// Invalid voltage for operation
+    /// Invalid voltage
     InvalidVoltage,
-    /// SDIO switch to high speed failed
+    /// SDIO switch to high speed fail
     SdioSwitchHighSpeedFail,
-    /// SDIO read CIS failed
+    /// SDIO read CIS fail
     SdioReadCISFail,
     /// Invalid SDIO card
     SdioInvalidCard,
-    /// HS200/HS400 tuning failed
+    /// Tuning failed
     TuningFail,
-    /// Voltage switch failed
+    /// Switch voltage failed
     SwitchVoltageFail,
-    /// Voltage switch to 1.8V failed, 3.3V succeeded
+    /// Switch to 1.8V failed, card remains at 3.3V
     SwitchVoltage18VFail33VSuccess,
-    /// Retuning requested by card
+    /// Re-tuning requested by card
     ReTuningRequest,
     /// Set driver strength failed
     SetDriverStrengthFail,
@@ -106,23 +106,20 @@ pub enum MCIHostError {
     SetPowerClassFail,
     /// Host controller not ready
     HostNotReady,
-    /// Card detection failed
+    /// Card detect failed
     CardDetectFailed,
-    /// AU size not properly configured
+    /// AU size not set properly
     AuSizeNotSetProperly,
-    /// Polling for card idle status failed
+    /// Polling card idle status failed
     PollingCardIdleFailed,
     /// Deselect card failed
     DeselectCardFailed,
-    /// Card status is idle
+    /// Card is idle
     CardStatusIdle,
-    /// Card status is busy
+    /// Card is busy
     CardStatusBusy,
     /// Card initialization failed
     CardInitFailed,
-    /// IRQ initialization failed
-    IrqInitFailed,
 }
 
-/// Result type for MCI host operations
 pub type MCIHostStatus<T = ()> = Result<T, MCIHostError>;

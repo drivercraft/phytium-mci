@@ -1,17 +1,12 @@
-//! Hardware control operations for MCI
-//!
-//! This module provides direct hardware register access and control
-//! functions for the MCI controller.
-
 use super::MCI;
 
-use super::consts::*;
+use super::constants::*;
 use super::err::*;
 use super::regs::*;
 
 use log::*;
 
-/// APIs for direct register operations
+/// APIs for directly operating registers
 impl MCI {
     pub(crate) fn status_get(&self) -> MCIStatus {
         let reg = self.config.reg();
@@ -107,20 +102,21 @@ impl MCI {
         }
 
         /* update clock after reset */
+        self.private_cmd_send(MCICmd::UPD_CLK, 0)?;
         if let Err(e) = self.private_cmd_send(MCICmd::UPD_CLK, 0) {
             error!("Update clock failed!");
             return Err(e);
         }
 
         /* for fifo reset, need to check if fifo empty */
-        if reset_bits.contains(MCICtrl::FIFO_RESET)
-            && let Err(e) = reg.retry_for(
+        if reset_bits.contains(MCICtrl::FIFO_RESET) {
+            if let Err(e) = reg.retry_for(
                 |reg: MCIStatus| reg.contains(MCIStatus::FIFO_EMPTY),
                 Some(RETRIES_TIMEOUT),
-            )
-        {
-            error!("Fifo not empty!");
-            return Err(e);
+            ) {
+                error!("Fifo not empty!");
+                return Err(e);
+            }
         }
         Ok(())
     }
@@ -161,24 +157,7 @@ impl MCI {
 
     pub(crate) fn idma_reset(&self) {
         let reg = self.config.reg();
-        reg.set_reg(MCIBusMode::SWR); /* Write 1 to soft reset idma, hardware auto-clears to 0 when reset completes */
-    }
-
-    pub(crate) fn set_ddr_mode(&self, enable: bool) {
-        let reg = self.config.reg();
-        let mut uhs_val = reg.read_reg::<MCIUhsReg>();
-        let mut emmc_val = reg.read_reg::<MCIEmmcDdrReg>();
-
-        if enable {
-            uhs_val.insert(MCIUhsReg::DDR);
-            emmc_val.insert(MCIEmmcDdrReg::CYCLE);
-        } else {
-            uhs_val.remove(MCIUhsReg::DDR);
-            emmc_val.remove(MCIEmmcDdrReg::CYCLE);
-        }
-
-        reg.write_reg(uhs_val);
-        reg.write_reg(emmc_val);
+        reg.set_reg(MCIBusMode::SWR); /* Write 1 to soft reset idma, hardware auto-clears to 0 after reset completes */
     }
 
     pub(crate) fn raw_status_get(&self) -> MCIRawInts {

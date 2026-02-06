@@ -1,4 +1,4 @@
-use super::{consts::SdTimingMode, io_voltage::SdIoVoltage};
+use super::{constants::SdTimingMode, io_voltage::SdIoVoltage};
 use crate::mci_host::mci_host_card_detect::MCIHostCardDetect;
 use alloc::rc::Rc;
 

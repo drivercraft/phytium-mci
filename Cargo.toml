@@ -15,6 +15,7 @@ categories = ["no-std", "embedded", "hardware-support"]
 [dependencies]
 tock-registers = "0.9.0"
 log = "0.4"
+dma-api = { version = "0.2", features = ["alloc"] }
 nb = "1.1"
 bitflags = "2.8"
 bytemuck = "1.22.0"
@@ -25,7 +26,6 @@ rlsf = "0.2.1"
 [dev-dependencies]
 # Hardware integration test dependencies (for tests/test.rs)
 bare-test = "0.7"
-pcie = "0.2"
 byte-unit = { version = "5.1.6", default-features = false, features = ["byte"] }
 spin_on = "0.1.1"
 
@@ -33,11 +33,9 @@ spin_on = "0.1.1"
 bare-test-macros = "0.2"
 
 [features]
-default = ["pio", "poll"]
+default = ["pio"]
 dma = []
 pio = []
-poll = []
-irq = []
 
 [[test]]
 name = "test"

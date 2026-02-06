@@ -1,42 +1,42 @@
-//! Error types for MCI operations
+//! # MCI Error Types
 //!
-//! This module defines the error types and result type used throughout
-//! the MCI driver for error handling.
+//! This module defines error types for MCI controller operations.
 
 use super::RegError;
 
-/// Errors that can occur during MCI operations
+/// MCI controller error enumeration.
 #[derive(Debug)]
 pub enum MCIError {
-    /// Operation timed out
+    /// Operation timeout
     Timeout,
-    /// Device not initialized
+    /// Controller not initialized
     NotInit,
-    /// Buffer too short for operation
+    /// Buffer too short
     ShortBuf,
     /// Operation not supported
     NotSupport,
-    /// Device in invalid state
+    /// Invalid controller state
     InvalidState,
-    /// Data transfer timeout
+    /// Transfer timeout
     TransTimeout,
     /// Command timeout
     CmdTimeout,
     /// No card detected
     NoCard,
-    /// Device busy
+    /// Controller busy
     Busy,
-    /// DMA buffer not properly aligned
+    /// DMA buffer not aligned
     DmaBufUnalign,
     /// Invalid timing configuration
     InvalidTiming,
 }
 
 impl RegError for MCIError {
+    /// Create a timeout error
     fn timeout() -> Self {
         MCIError::Timeout
     }
 }
 
-/// Result type for MCI operations
+/// Result type for MCI operations.
 pub type MCIResult<T = ()> = Result<T, MCIError>;

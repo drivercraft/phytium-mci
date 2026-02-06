@@ -1,131 +1,244 @@
+//! # MCI Host Constants
+//!
+//! This module defines constants and enumerations for the MCI host controller including:
+//! - Command types and response types
+//! - Common commands (SD/MMC)
+//! - Card status flags
+//! - OCR register flags
+//! - Host capability flags
+//! - Size constants
+
 use bitflags::bitflags;
 
+/// Command type enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostCmdType {
-    Normal = 0,  // Normal command
-    Suspend = 1, // Suspend command
-    Resume = 2,  // Resume command
-    Abort = 3,   // Abort command
-    Empty = 4,   // Empty command
+    /// Normal command
+    Normal = 0,
+    /// Suspend command
+    Suspend = 1,
+    /// Resume command
+    Resume = 2,
+    /// Abort command
+    Abort = 3,
+    /// Empty command
+    Empty = 4,
 }
 
+/// Response type enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostResponseType {
-    None = 0, // No response
-    R1 = 1,   // Response type: R1
-    R1b = 2,  // Response type: R1b
-    R2 = 3,   // Response type: R2
-    R3 = 4,   // Response type: R3
-    R4 = 5,   // Response type: R4
-    R5 = 6,   // Response type: R5
-    R5b = 7,  // Response type: R5b
-    R6 = 8,   // Response type: R6s
-    R7 = 9,   // Response type: R7
+    /// No response
+    None = 0,
+    /// R1 response
+    R1 = 1,
+    /// R1b response (with busy)
+    R1b = 2,
+    /// R2 response (136-bit)
+    R2 = 3,
+    /// R3 response (OCR)
+    R3 = 4,
+    /// R4 response
+    R4 = 5,
+    /// R5 response
+    R5 = 6,
+    /// R5b response (with busy)
+    R5b = 7,
+    /// R6 response
+    R6 = 8,
+    /// R7 response
+    R7 = 9,
 }
 
+/// Data packet format enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostDataPacketFormat {
-    MSBFirst = 0, // Data packet format: MSB first
-    LSBFirst = 1, // Data packet format: LSB first
+    /// MSB first format
+    MSBFirst = 0,
+    /// LSB first format
+    LSBFirst = 1,
 }
 
+/// Bus width enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostBusWdith {
+    /// 1-bit bus width
     Bit1 = 1,
+    /// 4-bit bus width
     Bit4 = 4,
+    /// 8-bit bus width
     Bit8 = 8,
 }
 
+/// Common SD/MMC commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCIHostCommonCmd {
-    GoIdleState = 0,         // Go Idle State
-    AllSendCid = 2,          // All Send CID
-    SetDsr = 4,              // Set DSR
-    SelectCard = 7,          // Select Card
-    SendCsd = 9,             // Send CSD
-    SendCid = 10,            // Send CID
-    StopTransmission = 12,   // Stop Transmission
-    SendStatus = 13,         // Send Status
-    GoInactiveState = 15,    // Go Inactive State
-    SetBlockLength = 16,     // Set Block Length
-    ReadSingleBlock = 17,    // Read Single Block
-    ReadMultipleBlock = 18,  // Read Multiple Block
-    SetBlockCount = 23,      // Set Block Count
-    WriteSingleBlock = 24,   // Write Single Block
-    WriteMultipleBlock = 25, // Write Multiple Block
-    ProgramCsd = 27,         // Program CSD
-    SetWriteProtect = 28,    // Set Write Protect
-    ClearWriteProtect = 29,  // Clear Write Protect
-    SendWriteProtect = 30,   // Send Write Protect
-    Erase = 38,              // Erase
-    LockUnlock = 42,         // Lock Unlock
-    ApplicationCommand = 55, // Send Application Command
-    GeneralCommand = 56,     // General Purpose Command
-    ReadOcr = 58,            // Read OCR
+    /// CMD0: Go Idle State
+    GoIdleState = 0,
+    /// CMD2: All Send CID
+    AllSendCid = 2,
+    /// CMD4: Set DSR
+    SetDsr = 4,
+    /// CMD7: Select Card
+    SelectCard = 7,
+    /// CMD9: Send CSD
+    SendCsd = 9,
+    /// CMD10: Send CID
+    SendCid = 10,
+    /// CMD12: Stop Transmission
+    StopTransmission = 12,
+    /// CMD13: Send Status
+    SendStatus = 13,
+    /// CMD15: Go Inactive State
+    GoInactiveState = 15,
+    /// CMD16: Set Block Length
+    SetBlockLength = 16,
+    /// CMD17: Read Single Block
+    ReadSingleBlock = 17,
+    /// CMD18: Read Multiple Block
+    ReadMultipleBlock = 18,
+    /// CMD23: Set Block Count
+    SetBlockCount = 23,
+    /// CMD24: Write Single Block
+    WriteSingleBlock = 24,
+    /// CMD25: Write Multiple Block
+    WriteMultipleBlock = 25,
+    /// CMD27: Program CSD
+    ProgramCsd = 27,
+    /// CMD28: Set Write Protect
+    SetWriteProtect = 28,
+    /// CMD29: Clear Write Protect
+    ClearWriteProtect = 29,
+    /// CMD30: Send Write Protect
+    SendWriteProtect = 30,
+    /// CMD38: Erase
+    Erase = 38,
+    /// CMD42: Lock Unlock
+    LockUnlock = 42,
+    /// CMD55: Application Command
+    ApplicationCommand = 55,
+    /// CMD56: General Purpose Command
+    GeneralCommand = 56,
+    /// CMD58: Read OCR
+    ReadOcr = 58,
 }
 
+/// SDIO command enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCISDIOCommand {
-    SendRelativeAddress = 3,    // Send Relative Address
-    SendOperationCondition = 5, // Send Operation Condition
-    SendInterfaceCondition = 8, // Send Interface Condition
-    RWIODirect = 52,            // Read/Write I/O Direct
-    RWIODirectExtended = 53,    // Read/Write I/O Direct Extended
+    /// CMD3: Send Relative Address
+    SendRelativeAddress = 3,
+    /// CMD5: Send Operation Condition
+    SendOperationCondition = 5,
+    /// CMD8: Send Interface Condition
+    SendInterfaceCondition = 8,
+    /// CMD52: Read/Write I/O Direct
+    RWIODirect = 52,
+    /// CMD53: Read/Write I/O Direct Extended
+    RWIODirectExtended = 53,
 }
 
+/// SDIO CCCR address enumeration.
+///
+/// CCCR (SDIO Card Common Control Register) addresses for SDIO card configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MCISDIOCCCRAddr {
-    SDIOVer = 0x00,            // CCCR & SDIO version
-    SDVersion = 0x01,          // SD version
-    IOEnable = 0x02,           // io enable register
-    IOReady = 0x03,            // io ready register
-    IOIntEnable = 0x04,        // io interrupt enable register
-    IOIntPending = 0x05,       // io interrupt pending register
-    IOAbort = 0x06,            // io abort register
-    BusInterface = 0x07,       // bus interface register
-    CardCapability = 0x08,     // card capability register
-    CommonCISPointer = 0x09,   // common CIS pointer register
-    BusSuspend = 0x0C,         // bus suspend register
-    FunctionSelect = 0x0D,     // function select register
-    ExecutionFlag = 0x0E,      // execution flag register
-    ReadyFlag = 0x0F,          // ready flag register
-    FN0BlockSizeLow = 0x10,    // FN0 block size register
-    FN0BlockSizeHigh = 0x11,   // FN0 block size register
-    PowerControl = 0x12,       // power control register
-    BusSpeed = 0x13,           // bus speed register
-    UHSITimingSupport = 0x14,  // UHS-I timing support register
-    DriverStrength = 0x15,     // Driver strength register
-    InterruptExtension = 0x16, // Interrupt extension register
+    /// CCCR & SDIO version
+    SDIOVer = 0x00,
+    /// SD version
+    SDVersion = 0x01,
+    /// I/O enable register
+    IOEnable = 0x02,
+    /// I/O ready register
+    IOReady = 0x03,
+    /// I/O interrupt enable register
+    IOIntEnable = 0x04,
+    /// I/O interrupt pending register
+    IOIntPending = 0x05,
+    /// I/O abort register
+    IOAbort = 0x06,
+    /// Bus interface register
+    BusInterface = 0x07,
+    /// Card capability register
+    CardCapability = 0x08,
+    /// Common CIS pointer register
+    CommonCISPointer = 0x09,
+    /// Bus suspend register
+    BusSuspend = 0x0C,
+    /// Function select register
+    FunctionSelect = 0x0D,
+    /// Execution flag register
+    ExecutionFlag = 0x0E,
+    /// Ready flag register
+    ReadyFlag = 0x0F,
+    /// FN0 block size register (low byte)
+    FN0BlockSizeLow = 0x10,
+    /// FN0 block size register (high byte)
+    FN0BlockSizeHigh = 0x11,
+    /// Power control register
+    PowerControl = 0x12,
+    /// Bus speed register
+    BusSpeed = 0x13,
+    /// UHS-I timing support register
+    UHSITimingSupport = 0x14,
+    /// Driver strength register
+    DriverStrength = 0x15,
+    /// Interrupt extension register
+    InterruptExtension = 0x16,
 }
 
 bitflags! {
+    /// Card status flags in SD card response.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct MCIHostCardStatusFlag: u32 {
-        const OUT_OF_RANGE                  = 1 << 31; // Out of range status bit
-        const ADDRESS_ERROR                 = 1 << 30; // Address error status bit
-        const BLOCK_LENGTH_ERROR            = 1 << 29; // Block length error status bit
-        const ERASE_SEQUENCE_ERROR          = 1 << 28; // Erase sequence error status bit
-        const ERASE_PARAMETER_ERROR         = 1 << 27; // Erase parameter error status bit
-        const WRITE_PROTECT_VIOLATION       = 1 << 26; // Write protection violation status bit
-        const CARD_IS_LOCKED                = 1 << 25; // Card locked status bit
-        const LOCK_UNLOCK_FAILED            = 1 << 24; // Lock/unlock error status bit
-        const COMMAND_CRC_ERROR             = 1 << 23; // CRC error status bit
-        const ILLEGAL_COMMAND               = 1 << 22; // Illegal command status bit
-        const CARD_ECC_FAILED               = 1 << 21; // Card ECC error status bit
-        const CARD_CONTROLLER_ERROR         = 1 << 20; // Internal card controller error status bit
-        const ERROR                         = 1 << 19; // A general or an unknown error status bit
-        const CID_CSD_OVERWRITE             = 1 << 16; // CID/CSD overwrite status bit
-        const WRITE_PROTECT_ERASE_SKIP      = 1 << 15; // Write protection erase skip status bit
-        const CARD_ECC_DISABLED             = 1 << 14; // Card ECC disabled status bit
-        const ERASE_RESET                   = 1 << 13; // Erase reset status bit
-        const READY_FOR_DATA                = 1 << 8;  // Ready for data status bit
-        const SWITCH_ERROR                  = 1 << 7;  // Switch error status bit
-        const APPLICATION_COMMAND           = 1 << 5;  // Application command enabled status bit
-        const AUTHENTICATION_SEQUENCE_ERROR = 1 << 3;  // Error in the sequence of authentication process
-        const ALL_ERROR_FLAG = 0xFFF90008;    // All error status bits
+        /// Out of range status bit
+        const OUT_OF_RANGE = 1 << 31;
+        /// Address error status bit
+        const ADDRESS_ERROR = 1 << 30;
+        /// Block length error status bit
+        const BLOCK_LENGTH_ERROR = 1 << 29;
+        /// Erase sequence error status bit
+        const ERASE_SEQUENCE_ERROR = 1 << 28;
+        /// Erase parameter error status bit
+        const ERASE_PARAMETER_ERROR = 1 << 27;
+        /// Write protection violation status bit
+        const WRITE_PROTECT_VIOLATION = 1 << 26;
+        /// Card locked status bit
+        const CARD_IS_LOCKED = 1 << 25;
+        /// Lock/unlock error status bit
+        const LOCK_UNLOCK_FAILED = 1 << 24;
+        /// CRC error status bit
+        const COMMAND_CRC_ERROR = 1 << 23;
+        /// Illegal command status bit
+        const ILLEGAL_COMMAND = 1 << 22;
+        /// Card ECC error status bit
+        const CARD_ECC_FAILED = 1 << 21;
+        /// Internal card controller error status bit
+        const CARD_CONTROLLER_ERROR = 1 << 20;
+        /// A general or an unknown error status bit
+        const ERROR = 1 << 19;
+        /// CID/CSD overwrite status bit
+        const CID_CSD_OVERWRITE = 1 << 16;
+        /// Write protection erase skip status bit
+        const WRITE_PROTECT_ERASE_SKIP = 1 << 15;
+        /// Card ECC disabled status bit
+        const CARD_ECC_DISABLED = 1 << 14;
+        /// Erase reset status bit
+        const ERASE_RESET = 1 << 13;
+        /// Ready for data status bit
+        const READY_FOR_DATA = 1 << 8;
+        /// Switch error status bit
+        const SWITCH_ERROR = 1 << 7;
+        /// Application command enabled status bit
+        const APPLICATION_COMMAND = 1 << 5;
+        /// Error in the sequence of authentication process
+        const AUTHENTICATION_SEQUENCE_ERROR = 1 << 3;
+        /// All error status bits
+        const ALL_ERROR_FLAG = 0xFFF90008;
     }
 }
 
+/// Card current state enumeration (internal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostCurrentState {
     Idle = 0,
@@ -157,24 +270,36 @@ impl MCIHostCurrentState {
     }
 }
 
+/// Operation voltage enumeration (internal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MCIHostOperationVoltage {
+pub(crate) enum MCIHostOperationVoltage {
     None = 0,
+    /// 3.3V operation
     Voltage330V = 1,
+    /// 3.0V operation
     Voltage300V = 2,
+    /// 1.8V operation
     Voltage180V = 3,
 }
 
+/// Card detection type enumeration (internal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MCIHostDetectCardType {
+    /// Detection via GPIO card detect pin
     ByGpioCD,
+    /// Detection via host controller card detect
     ByHostCD,
+    /// Detection via DATA3 pin
     ByHostDATA3,
 }
 
+/// Default clock frequency for card initialization (400 kHz)
 pub(crate) const MCI_HOST_CLOCK_400KHZ: u32 = 400_000;
+/// Maximum number of command retries
 pub(crate) const MCI_HOST_MAX_CMD_RETRIES: u32 = 10;
+/// Default block size (512 bytes)
 pub(crate) const MCI_HOST_DEFAULT_BLOCK_SIZE: u32 = 512;
+/// Maximum block length (4096 bytes)
 pub(crate) const MCI_HOST_MAX_BLOCK_LENGTH: u32 = 4096;
 
 bitflags! {
@@ -259,11 +384,15 @@ bitflags! {
 }
 
 bitflags! {
+    /// Extended host capability flags.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) struct MCIHostCapabilityExt: u32 {
-        const BIT8_WIDTH =1;
+        /// 8-bit data width capability
+        const BIT8_WIDTH = 1;
     }
 }
+
+// Size constants
 
 pub const SZ_1: u64 = 0x00000001;
 pub const SZ_2: u64 = 0x00000002;

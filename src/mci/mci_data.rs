@@ -1,22 +1,26 @@
-//! Data transfer structures for MCI operations
+//! # MCI Data Transfer Structure
 //!
-//! This module defines the data structures used for transferring data
-//! between the host and SD/MMC cards.
+//! This module provides the data transfer structure for MCI operations.
 
 use alloc::vec::Vec;
 
-/// Data transfer structure for MCI operations
+/// MCI data transfer structure.
 ///
-/// Represents a data buffer with associated metadata for block transfers.
+/// This structure contains information about data transfers including
+/// buffer pointers, block size, block count, and data length.
 #[derive(Debug, Clone)]
 pub(crate) struct MCIData {
-    // todo Using smart pointers involves extensive fine-tuning and code modifications,
-    // and can easily cause potential illegal memory access
-    // Temporarily not considering using pointers to represent buf here as in the source code
+    //TODO Will using smart pointers affect performance?
+    /// Data buffer (CPU address)
     buf: Option<Vec<u32>>,
+    /// Data buffer DMA address
+    #[cfg(feature = "dma")]
     buf_dma: usize,
+    /// Block size
     blksz: u32,
+    /// Block count
     blkcnt: u32,
+    /// Total data length
     datalen: u32,
 }
 
@@ -24,6 +28,7 @@ impl MCIData {
     pub(crate) fn new() -> Self {
         MCIData {
             buf: None,
+            #[cfg(feature = "dma")]
             buf_dma: 0,
             blksz: 0,
             blkcnt: 0,
@@ -63,18 +68,16 @@ impl MCIData {
         self.buf.as_mut()
     }
 
-    pub(crate) fn buf_take(&mut self) -> Option<Vec<u32>> {
-        self.buf.take()
-    }
-
     pub(crate) fn buf_set(&mut self, buf: Option<Vec<u32>>) {
         self.buf = buf
     }
 
+    #[cfg(feature = "dma")]
     pub(crate) fn buf_dma(&self) -> usize {
         self.buf_dma
     }
 
+    #[cfg(feature = "dma")]
     pub(crate) fn buf_dma_set(&mut self, buf_dma: usize) {
         self.buf_dma = buf_dma;
     }

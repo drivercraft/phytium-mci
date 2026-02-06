@@ -1,55 +1,21 @@
-//! MMC/SD Host Controller Protocol Layer.
+//! # MCI Host Module
 //!
-//! This module implements the SD/MMC host controller protocol, providing the
-//! abstraction layer between the hardware controller and the card-specific
-//! drivers. It handles command issuing, data transfers, and card state management.
+//! This module provides the host controller abstraction layer for SD/MMC card operations.
+//! It implements higher-level card management functions on top of the low-level MCI controller.
 //!
-//! # Overview
+//! ## Components
 //!
-//! The `MCIHost` provides:
-//! - **Command management** - Sending commands and receiving responses
-//! - **Data transfer** - Block read/write operations with DMA or PIO
-//! - **Card state** - Tracking card voltage, bus width, and clock frequency
-//! - **Card detection** - Automatic card insertion/removal detection
-//! - **Capability reporting** - Host controller capabilities and limits
+//! - **MCIHost**: Main host controller structure managing card operations
+//! - **mci_sdif**: SDIF device implementation
+//! - **sd**: SD card specific operations and data structures
 //!
-//! # Architecture
+//! ## Functionality
 //!
-//! ```text
-//! ┌─────────────────────────────────────┐
-//! │  Card Driver (SdCard, EmmcCard)    │
-//! └──────────────┬──────────────────────┘
-//!                │
-//! ┌──────────────▼──────────────────────┐
-//! │         MCIHost                     │
-//! │  - Command sequencing               │
-//! │  - Card state management            │
-//! │  - Transfer coordination            │
-//! └──────────────┬──────────────────────┘
-//!                │
-//! ┌──────────────▼──────────────────────┐
-//! │         SDIFDev                     │
-//! │  - Hardware register access         │
-//! │  - DMA/PIO control                  │
-//! │  - Interrupt handling               │
-//! └─────────────────────────────────────┘
-//! ```
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use phytium_mci::mci_host::{MCIHost, MCIHostConfig};
-//! use core::ptr::NonNull;
-//!
-//! // Create host configuration
-//! let config = MCIHostConfig::new();
-//!
-//! // Create host instance
-//! let mut host = MCIHost::new(device, config);
-//!
-//! // Initialize the host
-//! host.init(NonNull::new_unchecked(0x2800_1000 as *mut u8))?;
-//! ```
+//! - Card initialization and detection
+//! - Command execution (standard and application-specific)
+//! - Data transfer operations
+//! - Card capability queries
+//! - Voltage and bus width configuration
 
 #[allow(unused)]
 mod constants;
@@ -57,6 +23,7 @@ pub mod err;
 mod mci_card_base;
 mod mci_host_card_detect;
 mod mci_host_config;
+mod mci_host_device;
 mod mci_host_transfer;
 pub mod mci_sdif;
 pub mod sd;
@@ -67,42 +34,40 @@ use alloc::{boxed::Box, rc::Rc};
 
 use constants::*;
 use err::{MCIHostError, MCIHostStatus};
+use log::error;
 use mci_host_card_detect::MCIHostCardDetect;
 use mci_host_config::MCIHostConfig;
+use mci_host_device::MCIHostDevice;
 use mci_host_transfer::{MCIHostCmd, MCIHostTransfer};
-use mci_sdif::sdif_device::SDIFDev;
 
 type MCIHostCardIntFn = fn();
 
-/// MMC/SD Host Controller.
+/// MCI Host controller.
 ///
-/// `MCIHost` represents an SD/MMC host controller instance. It manages the
-/// communication between the host and the SD/MMC card, handling commands,
-/// data transfers, and card state.
+/// This structure manages the host controller for SD/MMC card operations.
+/// It provides higher-level card management functions including:
+/// - Card detection and initialization
+/// - Command execution
+/// - Data transfer management
+/// - Voltage and bus width configuration
 ///
-/// # Card State
+/// # Fields
 ///
-/// The host tracks the following card state:
-/// - `curr_voltage` - Current operating voltage (3.3V or 1.8V)
-/// - `curr_bus_width` - Current bus width (1, 4, or 8 bits)
-/// - `curr_clock_freq` - Current clock frequency in Hz
-///
-/// # Capabilities
-///
-/// The host reports its capabilities through the `capability` field:
-/// - Supported voltage ranges
-/// - Supported bus widths
-/// - High-speed mode support
-/// - DMA support
-/// - UHS-I mode support
-///
-/// # Card Detection
-///
-/// Optional card detection is available through the `cd` field when
-/// supported by the hardware.
+/// - `dev`: The underlying device implementation
+/// - `config`: Host configuration
+/// - `curr_voltage`: Current operation voltage
+/// - `curr_bus_width`: Current bus width (1/4/8 bit)
+/// - `curr_clock_freq`: Current clock frequency
+/// - `source_clock_hz`: Source clock frequency in Hz
+/// - `capability`: Host capabilities
+/// - `max_block_count`: Maximum block count for transfer
+/// - `max_block_size`: Maximum block size for transfer
+/// - `tuning_type`: Tuning type for high-speed modes
+/// - `cd`: Optional card detection handler
+/// - `card_int`: Card interrupt handler
 #[allow(unused)]
 pub struct MCIHost {
-    pub(crate) dev: Box<SDIFDev>,
+    pub(crate) dev: Box<dyn MCIHostDevice>,
     pub(crate) config: MCIHostConfig,
     pub(crate) curr_voltage: Cell<MCIHostOperationVoltage>,
     pub(crate) curr_bus_width: u32,
@@ -116,12 +81,12 @@ pub struct MCIHost {
 
     pub(crate) cd: Option<Rc<MCIHostCardDetect>>, // Card detection
     pub(crate) card_int: MCIHostCardIntFn,
-    //todo uint8_t tuningType not yet ported
+    //? Here uint8_t tuningType, sdmmc_osa_event_t hostEvent, sdmmc_osa_mutex_t lock are not ported
 }
 
 #[allow(unused)]
 impl MCIHost {
-    pub(crate) fn new(dev: Box<SDIFDev>, config: MCIHostConfig) -> Self {
+    pub(crate) fn new(dev: Box<dyn MCIHostDevice>, config: MCIHostConfig) -> Self {
         MCIHost {
             dev,
             config,
@@ -214,6 +179,7 @@ impl MCIHost {
     }
 
     pub(crate) fn go_idle(&self) -> MCIHostStatus {
+        error!("cmd0 starts");
         let mut command = MCIHostCmd::new();
 
         command.index_set(MCIHostCommonCmd::GoIdleState as u32);
@@ -271,7 +237,21 @@ impl MCIHost {
         Ok(())
     }
 
+    /// Initialize the host controller.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - Base address of the device registers
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if initialization fails.
     pub(crate) fn init(&mut self, addr: NonNull<u8>) -> MCIHostStatus {
         self.dev.init(addr, self)
     }
+}
+
+#[allow(unused)]
+impl MCIHost {
+    // TODO Wrap dev operations
 }

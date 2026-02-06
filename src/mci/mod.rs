@@ -1,100 +1,90 @@
-//! MCI (Memory Card Interface) hardware controller driver.
+//! # MCI (Memory Card Interface) Controller Module
 //!
-//! This module provides low-level access to the Phytium SD/MMC controller hardware,
-//! including register access, DMA/PIO transfers, and interrupt handling.
+//! This module provides the core functionality for the Phytium SD/MMC host controller.
+//! It handles low-level register operations, command execution, and data transfer.
+//!
+//! ## Note on Module Structure
+//!
+//! Submodules with names that conflict with `mci_host` submodule names should not be
+//! marked as `pub` to avoid naming conflicts when re-exported at the crate level.
+//!
+//! ## Modules
+//!
+//! - **constants**: Hardware register offsets and configuration constants
+//! - **err**: Error types and Result definitions
+//! - **regs**: Register access utilities
+//! - **mci_data**: Data transfer structures
+//! - **mci_dma**: DMA transfer support (feature-gated)
+//! - **mci_config**: Configuration structures
 
-#![allow(unused)]
-
-/// Constants and error types for the MCI driver
-pub mod consts;
-
-/// Error types for MCI operations
-mod err;
-
-/// Register definitions and access utilities
+//! Note: Submodules with duplicate names should not be marked as pub
+pub mod constants;
+pub mod err;
 pub mod regs;
 
-/// Command transfer logic
 mod mci_cmd;
-
-/// Command and data transfer structures
 mod mci_cmddata;
-
-/// MCI configuration and timing
 mod mci_config;
-
-/// Data transfer structures
 pub mod mci_data;
-
-/// DMA transfer implementation
+#[cfg(feature = "dma")]
 pub mod mci_dma;
-
-/// Hardware control operations
 mod mci_hardware;
-
-/// Interrupt handling
 mod mci_intr;
-
-/// PIO (Programmed I/O) transfer implementation
+#[cfg(feature = "pio")]
 mod mci_pio;
-
-/// Timing and delay configuration
 mod mci_timing;
 
+pub use err::*;
+
 use alloc::vec::Vec;
-use consts::*;
-use err::*;
-use log::*;
+use constants::*;
+#[cfg(feature = "dma")]
+use dma_api::DSlice;
+
+#[cfg(feature = "dma")]
 use mci_dma::{FSdifIDmaDesc, FSdifIDmaDescList};
+
+use log::*;
 use regs::*;
 
 pub use mci_cmddata::*;
 pub use mci_config::*;
-pub use mci_intr::fsdif_interrupt_handler;
 pub use mci_timing::*;
 
-use crate::flush;
-#[cfg(feature = "dma")]
-use crate::mmap;
-use crate::{IoPad, aarch::dsb, osa::pool_buffer::PoolBuffer, regs::*, sleep};
-use core::{ptr::NonNull, time::Duration};
+use crate::{osa::pool_buffer::PoolBuffer, regs::*, sleep, IoPad};
+use core::time::Duration;
 
-/// MCI (Memory Card Interface) hardware controller.
+/// MCI (Memory Card Interface) controller driver.
 ///
-/// `MCI` represents the low-level hardware controller for SD/MMC operations on
-/// Phytium SoCs. It manages register access, DMA descriptor chains, PIO transfers,
-/// and interrupt handling.
+/// This struct manages the SD/MMC host controller hardware, providing:
+/// - Controller initialization and deinitialization
+/// - Command and data transfer (DMA/PIO)
+/// - Clock frequency control
+/// - Card detection
+/// - Error handling and recovery
 ///
-/// # Transfer Modes
+/// # Example
 ///
-/// - **DMA Mode**: High-performance transfers using chained DMA descriptors
-/// - **PIO Mode**: Simple FIFO-based programmed I/O transfers
+/// ```rust
+/// use phytium_mci::mci::{MCI, MCIConfig};
 ///
-/// # Timing
-///
-/// The controller supports multiple timing configurations for different clock speeds:
-/// - 400 KHz (initialization)
-/// - 25 MHz (default speed)
-/// - 50 MHz (high speed)
-/// - 208 MHz (SDR104 UHS-I)
-///
-/// # IOPAD Integration
-///
-/// The controller optionally manages I/O pad configuration for signal delay tuning
-/// at high-speed clock rates.
+/// let config = MCIConfig::new(/* parameters */);
+/// let mut mci = MCI::new(config);
+/// mci.config_init(&config)?;
+/// ```
 pub struct MCI {
     config: MCIConfig,
     is_ready: bool,
-    desc_list: FSdifIDmaDescList,
-    prev_cmd: u32,
-    cur_cmd: Option<MCICmdData>,
+    prev_cmd: u32, // TODO: This needs to be implemented as an enum that implements Command
     curr_timing: MCITiming,
+    cur_cmd: Option<MCICmdData>,
     io_pad: Option<IoPad>,
+    #[cfg(feature = "dma")]
+    desc_list: FSdifIDmaDescList,
 }
 
 impl MCI {
-    /// Command index for voltage switching (CMD11)
-    pub const SWITCH_VOLTAGE: u32 = 11;
+    const SWITCH_VOLTAGE: u32 = 11;
     const EXT_APP_CMD: u32 = 55;
 
     pub(crate) fn relax_handler() {
@@ -109,6 +99,7 @@ impl MCI {
             curr_timing: MCITiming::new(),
             cur_cmd: None,
             io_pad: None,
+            #[cfg(feature = "dma")]
             desc_list: FSdifIDmaDescList::new(),
         }
     }
@@ -121,65 +112,44 @@ impl MCI {
             curr_timing: MCITiming::new(),
             cur_cmd: None,
             io_pad: None,
+            #[cfg(feature = "dma")]
             desc_list: FSdifIDmaDescList::new(),
-        }
-    }
-
-    pub(crate) fn config(&self) -> &MCIConfig {
-        &self.config
-    }
-
-    pub(crate) fn cur_cmd(&self) -> Option<&MCICmdData> {
-        self.cur_cmd.as_ref()
-    }
-
-    pub(crate) fn cur_cmd_index(&self) -> isize {
-        match self.cur_cmd() {
-            Some(cmd) => cmd.cmdidx() as isize,
-            None => -1,
-        }
-    }
-
-    pub(crate) fn cur_cmd_arg(&self) -> isize {
-        match self.cur_cmd() {
-            Some(cmd) => cmd.cmdarg() as isize,
-            None => -1,
         }
     }
 }
 
 /// MCI pub API
 impl MCI {
-    /// Sets the I/O pad for signal delay tuning
+    /// Set the I/O pad for signal timing configuration.
     ///
-    /// # Arguments
-    ///
-    /// * `iopad` - The I/O pad to use for delay configuration
+    /// The I/O pad is used to configure delay settings for optimal signal timing.
     pub fn iopad_set(&mut self, iopad: IoPad) {
         self.io_pad = Some(iopad);
     }
 
-    /// Takes and returns the I/O pad, leaving `None` in its place
+    /// Take and remove the I/O pad from this MCI instance.
     ///
-    /// # Returns
-    ///
-    /// * `Some(IoPad)` - If an I/O pad was set
-    /// * `None` - If no I/O pad was configured
+    /// Returns `None` if no I/O pad was set.
     pub fn iopad_take(&mut self) -> Option<IoPad> {
         self.io_pad.take()
     }
 
-    /// Sets the current command being executed
-    ///
-    /// # Arguments
-    ///
-    /// * `cmd` - The command data to set as current
-    // TODO: Using clone to avoid ownership issues for now
+    // TODO: Used clone first to avoid ownership issues
     pub fn cur_cmd_set(&mut self, cmd: &MCICmdData) {
         self.cur_cmd = Some(cmd.clone());
     }
 
-    /// initialization SDIF controller instance
+    /// Initialize the SDIF controller instance.
+    ///
+    /// This function performs hardware initialization including:
+    /// - Resetting the controller
+    /// - Configuring clock and power
+    /// - Setting up interrupts
+    /// - Initializing DMA descriptors (if DMA mode is enabled)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if hardware initialization fails.
     pub fn config_init(&mut self, config: &MCIConfig) -> MCIResult {
         if self.is_ready {
             warn!("Device is already initialized!!!");
@@ -187,14 +157,21 @@ impl MCI {
         if *config != self.config {
             self.config = config.clone();
         }
-        if self.reset().is_ok() {
+        if let Ok(_) = self.reset() {
             self.is_ready = true;
             info!("Device initialize success !!!");
         }
         Ok(())
     }
 
-    /// deinitialization SDIF controller instance
+    /// Deinitialize the SDIF controller instance.
+    ///
+    /// This function performs cleanup operations:
+    /// - Disables interrupts (controller and DMA)
+    /// - Clears interrupt status
+    /// - Powers off the card
+    /// - Disables card clock
+    /// - Resets voltage to default 3.3V
     pub fn config_deinit(&mut self) -> MCIResult {
         self.interrupt_mask_set(MCIIntrType::GeneralIntr, MCIIntMask::ALL_BITS.bits(), false); /* Disable controller interrupt bits */
         self.interrupt_mask_set(MCIIntrType::DmaIntr, MCIDMACIntEn::ALL_BITS.bits(), false); /* Disable DMA interrupt bits */
@@ -207,13 +184,24 @@ impl MCI {
 
         let reg = self.config.reg();
         reg.clear_reg(MCIClkSrc::UHS_EXT_CLK_ENA); /* Disable external clock */
-        reg.clear_reg(MCIUhsReg::VOLT_180); /* Restore to 3.3v default voltage */
+        reg.clear_reg(MCIUhsReg::VOLT_180); /* Restore to 3.3V default voltage */
 
         self.is_ready = false;
         Ok(())
     }
 
-    /// Setup DMA descriptor for SDIF controller instance
+    /// Setup DMA descriptor list for SDIF controller instance.
+    ///
+    /// # Features
+    ///
+    /// This function is only available when the `dma` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The device is not initialized
+    /// - The device is not configured in DMA transfer mode
+    #[cfg(feature = "dma")]
     pub fn set_idma_list(&mut self, desc: &PoolBuffer, desc_num: u32) -> MCIResult {
         if !self.is_ready {
             error!("Device is not yet initialized!");
@@ -225,12 +213,21 @@ impl MCI {
             return Err(MCIError::InvalidState);
         }
 
-        #[cfg(feature = "dma")]
-        let bus_addr = mmap(desc.addr());
-        #[cfg(feature = "dma")]
-        {
-            self.desc_list.first_desc_dma = bus_addr as usize;
-        }
+        // TODO: Not very elegant, consider modifying later
+        let desc_vec = unsafe {
+            core::mem::ManuallyDrop::new(Vec::from_raw_parts(
+                desc.addr().as_ptr(),
+                desc_num as usize,
+                desc_num as usize,
+            ))
+        };
+        let slice = DSlice::from(&desc_vec[..]); // Get physical address
+        error!(
+            "set idma list, desc addr: 0x{:x}, desc num: {}",
+            slice.bus_addr(),
+            desc_num
+        );
+        self.desc_list.first_desc_dma = slice.bus_addr() as usize;
         self.desc_list.first_desc = desc.addr().as_ptr() as *mut FSdifIDmaDesc;
         self.desc_list.desc_num = desc_num;
         self.desc_list.desc_trans_sz = FSDIF_IDMAC_MAX_BUF_SIZE;
@@ -240,7 +237,24 @@ impl MCI {
         Ok(())
     }
 
-    /// Set the Card clock freqency
+    /// Set the card clock frequency.
+    ///
+    /// This function configures the card clock to the specified frequency.
+    /// It will:
+    /// - Select appropriate timing configuration
+    /// - Update pad delay settings
+    /// - Configure clock divider
+    /// - Enable/disable clock as needed
+    ///
+    /// # Arguments
+    ///
+    /// * `clk_hz` - Target clock frequency in Hz. Set to 0 to disable the clock.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No timing configuration is available for the requested frequency
+    /// - Clock update fails
     pub fn clk_freq_set(&mut self, clk_hz: u32) -> MCIResult {
         let reg = self.config.reg();
         let mut reg_val = MCICmd::UPD_CLK;
@@ -269,10 +283,9 @@ impl MCI {
             self.clock_set(false);
 
             /* update clock for clock source */
-            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE {
+            if let Err(err) = if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
                 self.private_cmd11_send(reg_val | cmd_reg)
             } else {
-                info!("updating clock, reg_val 0x{:x}", reg_val.bits());
                 self.private_cmd_send(reg_val, 0)
             } {
                 error!("update ext clock failed !!!");
@@ -292,14 +305,9 @@ impl MCI {
             self.clock_set(true);
 
             /* update clock for clock divider */
-
-            if cur_cmd_index == Self::SWITCH_VOLTAGE {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
-                info!(
-                    "updating clock for clock divider, reg_val 0x{:x}",
-                    reg_val.bits()
-                );
                 self.private_cmd_send(reg_val, 0)?;
             }
 
@@ -308,10 +316,9 @@ impl MCI {
             /* close bus clock in case target clock is 0 */
             self.clock_set(false);
 
-            if cur_cmd_index == Self::SWITCH_VOLTAGE {
+            if cur_cmd_index == Self::SWITCH_VOLTAGE as u32 {
                 self.private_cmd11_send(reg_val | cmd_reg)?;
             } else {
-                info!("switching voltage, reg_val is 0x{:x}", reg_val.bits());
                 self.private_cmd_send(reg_val, 0)?;
             }
 
@@ -322,10 +329,29 @@ impl MCI {
         Ok(())
     }
 
-    /// Start command and data transfer in DMA mode
+    /// Start command and data transfer in DMA mode.
+    ///
+    /// This function initiates a DMA-based transfer. It will:
+    /// - Wait for the card to be ready
+    /// - Reset FIFO and DMA
+    /// - Configure and transfer data if present
+    /// - Send the command
+    ///
+    /// # Features
+    ///
+    /// This function is only available when the `dma` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The device is not initialized
+    /// - DMA mode is not configured
+    /// - Card is not detected (for removable media)
+    /// - Card is busy
+    #[cfg(feature = "dma")]
     pub fn dma_transfer(&mut self, cmd_data: &mut MCICmdData) -> MCIResult {
         cmd_data.success_set(false);
-        self.cur_cmd_set(cmd_data);
+        self.cur_cmd_set(&cmd_data);
 
         if !self.is_ready {
             error!("Device is not yet initialized!");
@@ -366,12 +392,27 @@ impl MCI {
         }
 
         // transfer command
-        self.cmd_transfer(cmd_data)?;
-        info!("dma cmd transfer ok");
+        self.cmd_transfer(&cmd_data)?;
+
         Ok(())
     }
 
-    /// Wait DMA transfer finished by poll
+    /// Wait for DMA transfer to finish by polling.
+    ///
+    /// This function polls the interrupt status registers until the transfer
+    /// is complete or a timeout occurs.
+    ///
+    /// # Features
+    ///
+    /// This function is only available when the `dma` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The device is not initialized
+    /// - DMA mode is not configured
+    /// - Transfer timeout occurs
+    #[cfg(feature = "dma")]
     pub fn poll_wait_dma_end(&mut self, cmd_data: &mut MCICmdData) -> MCIResult {
         let wait_bits = if cmd_data.get_data().is_none() {
             MCIIntMask::CMD_BIT.bits()
@@ -394,26 +435,22 @@ impl MCI {
         let mut delay = RETRIES_TIMEOUT;
         loop {
             reg_val = self.config.reg().read_reg::<MCIRawInts>().bits();
-
-            if delay != 0 {
-                debug!(
-                    "reg_val = 0x{:x}, delay: {}, wait_bits: {}, result: {}",
-                    reg_val,
-                    delay,
-                    wait_bits,
-                    wait_bits & reg_val == wait_bits
-                );
+            if delay % 1000 == 0 {
+                debug!("polling dma end, reg_val = 0x{:x}", reg_val);
             }
+            // TODO: relax handler?
 
+            delay -= 1;
             if wait_bits & reg_val == wait_bits || delay == 0 {
                 break;
             }
-
-            delay -= 1;
         }
 
-        if wait_bits & reg_val != wait_bits && delay == 0 {
-            error!("Wait command done timeout, raw ints: 0x{reg_val:x}!");
+        /* clear status to ack data done */
+        self.raw_status_clear();
+
+        if wait_bits & reg_val != wait_bits && delay <= 0 {
+            error!("Wait command done timeout, raw ints: 0x{:x}!", reg_val);
             return Err(MCIError::CmdTimeout);
         }
 
@@ -426,14 +463,29 @@ impl MCI {
             }
         }
 
-        /* clear status to ack data done */
-        self.raw_status_clear();
-
         Ok(())
     }
 
-    /// Start command and data transfer in PIO mode
+    /// Start command and data transfer in PIO mode.
+    ///
+    /// This function initiates a PIO (Programmed I/O) based transfer.
+    /// For write operations, data is written to FIFO before sending the command.
+    ///
+    /// # Features
+    ///
+    /// This function is only available when the `pio` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The device is not initialized
+    /// - PIO mode is not configured
+    /// - Card is not detected (for removable media)
+    /// - Card is busy
+    /// - Data size exceeds FIFO capacity (0x800 bytes)
+    #[cfg(feature = "pio")]
     pub fn pio_transfer(&self, cmd_data: &mut MCICmdData) -> MCIResult {
+        #[cfg(feature = "pio")]
         let read = cmd_data.flag().contains(MCICmdFlag::READ_DATA);
         let reg = self.config.reg();
 
@@ -474,10 +526,11 @@ impl MCI {
             }
 
             /* set transfer data length and block size */
-            self.trans_bytes_set(data.datalen());
+            self.trans_bytes_set(data.datalen() as u32);
             self.blksize_set(data.blksz());
 
             /* if need to write, write to fifo before send command */
+            #[cfg(feature = "pio")]
             if !read {
                 /* invalide buffer for data to write */
                 unsafe { dsb() };
@@ -488,7 +541,25 @@ impl MCI {
         Ok(())
     }
 
-    /// Wait PIO transfer finished by poll
+    /// Wait for PIO transfer to finish by polling.
+    ///
+    /// This function polls the interrupt status registers until:
+    /// - Command transfer is complete
+    /// - Data transfer is complete (if data is present)
+    ///
+    /// For read operations, data is read from FIFO after the command completes.
+    ///
+    /// # Features
+    ///
+    /// This function is only available when the `pio` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The device is not initialized
+    /// - PIO mode is not configured
+    /// - Transfer timeout occurs
+    #[cfg(feature = "pio")]
     pub fn poll_wait_pio_end(&mut self, cmd_data: &mut MCICmdData) -> MCIResult {
         let read = cmd_data.flag().contains(MCICmdFlag::READ_DATA);
         let reg = self.config.reg();
@@ -498,7 +569,7 @@ impl MCI {
             return Err(MCIError::NotInit);
         }
 
-        if self.config.trans_mode() != MCITransMode::PIO {
+        if MCITransMode::PIO != self.config.trans_mode() {
             error!("device is not configure in PIO transfer mode.");
             return Err(MCIError::InvalidState);
         }
@@ -506,8 +577,9 @@ impl MCI {
         trace!("wait for PIO cmd to finish ...");
         if let Err(err) = reg.retry_for(
             |reg: MCIRawInts| {
-                sleep(Duration::from_micros(10));
-                reg.contains(MCIRawInts::CMD_BIT)
+                let result = reg.contains(MCIRawInts::CMD_BIT);
+                MCI::relax_handler();
+                result
             },
             Some(RETRIES_TIMEOUT),
         ) {
@@ -522,8 +594,8 @@ impl MCI {
         if cmd_data.get_data().is_some() && read {
             trace!("wait for PIO data to read ...");
             if let Err(err) = reg.retry_for(
-                |reg: MCIRawInts| {
-                    sleep(Duration::from_micros(10));
+                |reg| {
+                    MCI::relax_handler();
                     (MCIRawInts::DTO_BIT & reg).bits() != 0
                 },
                 Some(RETRIES_TIMEOUT),
@@ -532,20 +604,42 @@ impl MCI {
                 return Err(err);
             }
 
+            /* clear status to ack */
+            self.raw_status_clear();
             trace!(
                 "card cnt: 0x{:x}, fifo cnt: 0x{:x}",
                 reg.read_reg::<MCITranCardCnt>(),
                 reg.read_reg::<MCITranFifoCnt>()
             );
         }
-
+        /* clear status to ack cmd done */
         self.raw_status_clear();
         Ok(())
     }
 
-    /// Reset controller from error state
+    /* Read PIO data, it works in IRQ mode */
+    // TODO: Unknown if the protocol stack layer needs to call this, already implemented.
+    /* Get cmd response and received data after wait poll status or interrupt signal */
+    // TODO Unknown if the protocol stack layer needs to call this, already implemented.
+
+    /* Interrupt handler for SDIF instance */
+    // TODO: Will be used in interrupt mode
+    /* Register event call-back function as handler for interrupt events */
+    // TODO: Will be used in interrupt mode
+
+    /// Reset controller from error state.
+    ///
+    /// This function attempts to recover the controller from an error condition:
+    /// - Resets FIFO
+    /// - Resets card busy state
+    /// - Restarts clock
+    /// - Resets internal DMA (if DMA mode is enabled)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the device is not initialized or reset operations fail.
     pub fn restart(&self) -> MCIResult {
-        if !self.is_ready {
+        if false == self.is_ready {
             error!("Device is not yet initialized!!!");
             return Err(MCIError::NotInit);
         }
@@ -567,7 +661,10 @@ impl MCI {
         Ok(())
     }
 
-    /// Dump all register value of SDIF instance
+    /// Dump all register values of the SDIF instance.
+    ///
+    /// This function logs the current values of all hardware registers
+    /// for debugging purposes.
     pub fn register_dump(&self) {
         let reg = self.config.reg();
         warn!("cntrl: 0x{:x}", reg.read_reg::<MCICtrl>());
@@ -615,7 +712,14 @@ impl MCI {
         warn!("enableshift: 0x{:x}", reg.read_reg::<MCIEnableShift>());
     }
 
-    /// Dump command and data info
+    /// Dump command and data transfer information.
+    ///
+    /// This function logs detailed information about a command/data transfer
+    /// including command index, arguments, response, and data buffer details.
+    ///
+    /// # Arguments
+    ///
+    /// * `cmd_data` - Reference to the command data structure to dump
     pub fn cmd_info_dump(cmd_data: &MCICmdData) {
         debug!("cmd struct @{:p}", cmd_data);
         debug!("   opcode: {}", cmd_data.cmdidx());
@@ -639,7 +743,6 @@ impl MCI {
 /// MCI private API
 impl MCI {
     fn reset(&self) -> MCIResult {
-        info!("mci reset");
         /* set fifo */
         self.fifoth_set(
             MCIFifoThDMATransSize::DMATrans8,
@@ -720,7 +823,7 @@ impl MCI {
         let busy_bits = MCIStatus::DATA_BUSY | MCIStatus::DATA_STATE_MC_BUSY;
         let reg = self.config.reg();
         let reg_val = reg.read_reg::<MCIStatus>();
-        if reg_val.contains(busy_bits) {
+        if reg_val.contains(busy_bits.clone()) {
             warn!("Card is busy, waiting ...");
         }
         if let Err(err) = reg.retry_for(

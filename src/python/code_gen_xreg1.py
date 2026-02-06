@@ -59,7 +59,7 @@ def extract_macro_parameters(input_str):
         raise ValueError("Input string does not match the expected format.")
 
 if __name__ == '__main__':
-    # Read ./input_xreg1.rs line by line
+    # 逐行读取./input.rs
     with open('./input_xreg1.rs', 'r') as file:
         input_str = file.readline()
         while input_str:

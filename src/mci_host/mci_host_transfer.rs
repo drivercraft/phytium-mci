@@ -1,13 +1,19 @@
+//! # MCI Host Transfer Structures
+//!
+//! This module provides structures for command and data transfer operations.
+
 use alloc::vec::Vec;
 
 use super::constants::*;
 
-pub struct MCIHostTransfer {
+/// Host transfer structure containing command and data.
+pub(crate) struct MCIHostTransfer {
     data: Option<MCIHostData>,
     cmd: Option<MCIHostCmd>,
 }
 
 impl MCIHostTransfer {
+    /// Create a new empty transfer.
     pub(crate) fn new() -> Self {
         MCIHostTransfer {
             data: None,
@@ -15,42 +21,58 @@ impl MCIHostTransfer {
         }
     }
 
+    /// Get the data portion of the transfer.
     pub(crate) fn data(&self) -> Option<&MCIHostData> {
         self.data.as_ref()
     }
 
+    /// Set the data portion of the transfer.
     pub(crate) fn set_data(&mut self, data: Option<MCIHostData>) {
         self.data = data
     }
 
+    /// Get the command portion of the transfer.
     pub(crate) fn cmd(&self) -> Option<&MCIHostCmd> {
         self.cmd.as_ref()
     }
 
+    /// Set the command portion of the transfer.
     pub(crate) fn set_cmd(&mut self, cmd: Option<MCIHostCmd>) {
         self.cmd = cmd
     }
 
+    /// Get mutable reference to the data portion.
     pub(crate) fn data_mut(&mut self) -> Option<&mut MCIHostData> {
         self.data.as_mut()
     }
 
+    /// Get mutable reference to the command portion.
     pub(crate) fn cmd_mut(&mut self) -> Option<&mut MCIHostCmd> {
         self.cmd.as_mut()
     }
 }
 
+/// Host data transfer structure.
 #[allow(unused)]
 pub(crate) struct MCIHostData {
-    stream_transfer: bool, // Indicates whether this is a stream data transfer command
-    enable_auto_command12: bool, // Enable auto CMD12
-    enable_auto_command23: bool, // Enable auto CMD23
-    enable_ignore_error: bool, // Enable ignoring errors to read/write all data
-    data_type: u8,         // Used to distinguish normal/tuning/boot data
-    block_size: usize,     // Block size
-    block_count: u32,      // Block count
-    rx_data: Option<Vec<u32>>, // Buffer to save read data
-    tx_data: Option<Vec<u32>>, // Buffer for write data
+    /// Whether this is a stream transfer command
+    stream_transfer: bool,
+    /// Enable auto CMD12
+    enable_auto_command12: bool,
+    /// Enable auto CMD23
+    enable_auto_command23: bool,
+    /// Enable ignore error to read/write all data
+    enable_ignore_error: bool,
+    /// Data type (normal/tuning/boot)
+    data_type: u8,
+    /// Block size
+    block_size: usize,
+    /// Block count
+    block_count: u32,
+    /// Buffer for received data
+    rx_data: Option<Vec<u32>>,
+    /// Buffer for data to send
+    tx_data: Option<Vec<u32>>,
 }
 
 #[allow(unused)]
@@ -142,15 +164,23 @@ impl MCIHostData {
     }
 }
 
+/// Host command structure.
 #[allow(unused)]
 pub(crate) struct MCIHostCmd {
-    index: u32,                                  // 命令索引
-    argument: u32,                               // 命令参数
-    cmd_type: MCIHostCmdType,                    // 命令类型
-    response_type: MCIHostResponseType,          // 命令响应类型
-    response: [u32; 4],                          // 命令响应数据
-    response_error_flags: MCIHostCardStatusFlag, // 响应错误标志
-    flags: u32,                                  // 命令标志
+    /// Command index
+    index: u32,
+    /// Command argument
+    argument: u32,
+    /// Command type
+    cmd_type: MCIHostCmdType,
+    /// Response type
+    response_type: MCIHostResponseType,
+    /// Response data
+    response: [u32; 4],
+    /// Response error flags
+    response_error_flags: MCIHostCardStatusFlag,
+    /// Command flags
+    flags: u32,
 }
 
 #[allow(unused)]

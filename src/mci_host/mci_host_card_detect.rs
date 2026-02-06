@@ -4,10 +4,10 @@ use super::constants::MCIHostDetectCardType;
 pub struct MCIHostCardDetect {
     pub(crate) typ: MCIHostDetectCardType,
     pub(crate) cd_debounce_ms: u32,
-    // todo Function type that takes a boolean and a user data pointer
+    // TODO Function type that takes a boolean and a user data pointer
     pub(crate) card_detected: Option<MCIHostCdStatusFn>,
     pub(crate) dat3_pull_func: Option<MCIHostDat3PullFn>,
-    // todo user data
+    // TODO user data
 }
 
 type MCIHostCdStatusFn = fn() -> bool;

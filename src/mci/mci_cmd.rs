@@ -1,19 +1,14 @@
-//! Command transfer implementation for MCI operations
-//!
-//! This module handles the sending of commands to SD/MMC cards and
-//! processing of their responses.
+use core::time::Duration;
 
-use core::sync::atomic::Ordering;
-use core::sync::atomic::compiler_fence;
-
-use crate::aarch::dsb;
 use log::*;
 
-use super::MCI;
-use super::consts::*;
+use crate::sleep;
+
+use super::constants::*;
 use super::err::*;
 use super::mci_cmddata::MCICmdData;
 use super::regs::*;
+use super::MCI;
 
 impl MCI {
     pub(crate) fn private_cmd_send(&self, cmd: MCICmd, arg: u32) -> MCIResult {
@@ -28,8 +23,8 @@ impl MCI {
         unsafe { dsb() }; /* drain writebuffer */
 
         let cmd_reg = MCICmd::START | cmd;
-        reg.write_reg(cmd_reg);
 
+        reg.write_reg(cmd_reg);
         reg.retry_for(
             |reg: MCICmd| !reg.contains(MCICmd::START),
             Some(RETRIES_TIMEOUT),
@@ -49,7 +44,7 @@ impl MCI {
         Ok(())
     }
 
-    pub(crate) fn cmd_transfer(&self, cmd_data: &MCICmdData) -> MCIResult {
+    pub(crate) fn cmd_transfer<'a>(&self, cmd_data: &'a MCICmdData) -> MCIResult {
         let mut raw_cmd = MCICmd::empty();
         let reg = self.config.reg();
 
@@ -61,7 +56,7 @@ impl MCI {
         if flag.contains(MCICmdFlag::ABORT) {
             raw_cmd |= MCICmd::STOP_ABORT;
         }
-        /* Command requires card initialization, e.g., CMD-0 */
+        /* Command requires card initialization, such as CMD-0 */
         if flag.contains(MCICmdFlag::NEED_INIT) {
             raw_cmd |= MCICmd::INIT;
         }
@@ -69,7 +64,7 @@ impl MCI {
         if flag.contains(MCICmdFlag::SWITCH_VOLTAGE) {
             raw_cmd |= MCICmd::VOLT_SWITCH;
         }
-        /* Command transmission is accompanied by data transfer */
+        /* Command transfer process accompanied by data transfer */
         if flag.contains(MCICmdFlag::EXP_DATA) {
             raw_cmd |= MCICmd::DAT_EXP;
             if flag.contains(MCICmdFlag::WRITE_DATA) {
@@ -80,7 +75,7 @@ impl MCI {
         if flag.contains(MCICmdFlag::NEED_RESP_CRC) {
             raw_cmd |= MCICmd::RESP_CRC;
         }
-        /* Command expects response */
+        /* Command requires response */
         if flag.contains(MCICmdFlag::EXP_RESP) {
             raw_cmd |= MCICmd::RESP_EXP;
             if flag.contains(MCICmdFlag::EXP_LONG_RESP) {
@@ -113,6 +108,7 @@ impl MCI {
     }
 
     pub(crate) fn cmd_response_get(&mut self, cmd_data: &mut MCICmdData) -> MCIResult {
+        #[cfg(feature = "pio")]
         let read = cmd_data.flag().contains(MCICmdFlag::READ_DATA);
 
         if !self.is_ready {
@@ -120,15 +116,17 @@ impl MCI {
             return Err(MCIError::NotInit);
         }
 
-        if let Some(data) = cmd_data.get_mut_data()
-            && read
-            && MCITransMode::PIO == self.config.trans_mode()
-        {
-            self.pio_read_data(data)?;
+        #[cfg(feature = "pio")]
+        if let Some(data) = cmd_data.get_mut_data() {
+            if read {
+                if MCITransMode::PIO == self.config.trans_mode() {
+                    self.pio_read_data(data)?;
+                }
+            }
         }
 
         /* check response of cmd */
-        let flag = *cmd_data.flag();
+        let flag = cmd_data.flag().clone();
         let reg = self.config.reg();
         if flag.contains(MCICmdFlag::EXP_RESP) {
             let response = cmd_data.get_mut_response();
@@ -137,7 +135,7 @@ impl MCI {
                 response[1] = reg.read_reg::<MCIResp1>().bits();
                 response[2] = reg.read_reg::<MCIResp2>().bits();
                 response[3] = reg.read_reg::<MCIResp3>().bits();
-                debug!(
+                trace!(
                     "    resp: 0x{:x}-0x{:x}-0x{:x}-0x{:x}",
                     response[0], response[1], response[2], response[3]
                 );
@@ -146,11 +144,14 @@ impl MCI {
                 response[1] = 0;
                 response[2] = 0;
                 response[3] = 0;
-                debug!("    resp: 0x{:x}", response[0]);
+                trace!("    resp: 0x{:x}", response[0]);
             }
         }
 
         cmd_data.success_set(true); /* cmd / data transfer finished successful */
+        
+        sleep(Duration::from_micros(50)); // Allow some time for the command to settle
+        
         debug!(
             "============[{}-{}]@0x{:x} end ============",
             {
@@ -164,14 +165,17 @@ impl MCI {
             reg.addr.as_ptr() as usize
         );
 
+        trace!("cmd response get done ...");
+
         /* disable related interrupt */
         self.interrupt_mask_set(
             MCIIntrType::GeneralIntr,
             (MCIIntMask::INTS_CMD_MASK | MCIIntMask::INTS_DATA_MASK).bits(),
             false,
         );
+
         self.interrupt_mask_set(MCIIntrType::DmaIntr, MCIDMACIntEn::INTS_MASK.bits(), false);
-        debug!("cmd send done ...");
+        trace!("cmd send done ...");
 
         self.prev_cmd = cmd_data.cmdidx();
 

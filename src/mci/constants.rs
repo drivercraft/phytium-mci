@@ -1,79 +1,68 @@
-//! Constants and enumerations for the MCI driver
+//! # MCI Controller Constants
 //!
-//! This module defines all the constants, enums, and bitflags used throughout
-//! the MCI driver for hardware configuration and operation.
+//! This module defines constants and enumerations for the MCI controller including:
+//! - Register offsets
+//! - Command flags
+//! - Transfer modes
+//! - Interrupt types
+//! - Clock speeds
+//! - DMA descriptors
 
-#![allow(missing_docs)]
+use core::arch::asm;
 
 use bitflags::bitflags;
 
-/// MCI hardware instance identifiers
+/// MCI controller identifier.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MCIId {
-    /// MCI instance 0
     MCI0,
-    /// MCI instance 1
     MCI1,
 }
 
-impl Default for MCIId {
-    fn default() -> Self {
-        Self::MCI0
-    }
-}
-
-/// FIFO depth configuration for the MCI controller
+/// FIFO depth configuration.
 ///
-/// The values correspond to register bit positions for different FIFO sizes.
+/// The value represents the bit position in the register.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MCIFifoDepth {
-    /// 8-entry FIFO depth
     Depth8 = 23,
-    /// 16-entry FIFO depth
     Depth16 = 24,
-    /// 32-entry FIFO depth
     Depth32 = 25,
-    /// 64-entry FIFO depth
     Depth64 = 26,
-    /// 128-entry FIFO depth
     Depth128 = 27,
 }
 
-/// Command flags for MCI operations
-///
-/// These flags specify the properties and requirements of MCI commands,
-/// including whether they expect responses, data transfers, or special handling.
 bitflags! {
+    /// Command flags for MCI operations.
     #[derive(Debug, Clone, Copy)]
     pub struct MCICmdFlag: u32 {
-        /// Command requires card initialization (80 clock cycles)
+        /// Command needs initialization
         const NEED_INIT = 0x1;
-        /// Command expects a response from the card
+        /// Expect response
         const EXP_RESP = 0x2;
-        /// Command expects a long (128-bit) response
+        /// Expect long response (128-bit)
         const EXP_LONG_RESP = 0x4;
-        /// Response CRC should be checked
+        /// Response needs CRC check
         const NEED_RESP_CRC = 0x8;
-        /// Command involves data transfer
+        /// Expect data transfer
         const EXP_DATA = 0x10;
-        /// Data transfer is a write operation
+        /// Data write operation
         const WRITE_DATA = 0x20;
-        /// Data transfer is a read operation
+        /// Data read operation
         const READ_DATA = 0x40;
-        /// Automatically send CMD12 after data transfer
+        /// Need auto stop command
         const NEED_AUTO_STOP = 0x80;
-        /// Application-specific command with data transfer
+        /// Application specific command
         const ADTC = 0x100;
-        /// Command involves voltage switching
+        /// Voltage switch command
         const SWITCH_VOLTAGE = 0x200;
-        /// Command aborts current data transfer
+        /// Abort command
         const ABORT = 0x400;
-        /// Auto-send CMD12 at end of transfer
+        /// Auto CMD12 enabled
         const AUTO_CMD12 = 0x800;
     }
 }
 
-/// Transfer mode enumeration
+/// Transfer mode enumeration.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MCITransMode {
     /// DMA transfer mode
@@ -82,7 +71,7 @@ pub enum MCITransMode {
     PIO,
 }
 
-/// Interrupt type enumeration
+/// Interrupt type enumeration.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MCIIntrType {
     /// Controller interrupt status
@@ -91,41 +80,37 @@ pub enum MCIIntrType {
     DmaIntr,
 }
 
-/// Event type enumeration for MCI operations
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum FSdifEvtType {
+/// Event type enumeration.
+#[derive(Debug, PartialEq)]
+pub enum FsDifEvtType {
     /// Card detection event
     CardDetected = 0,
     /// Command transfer complete event
     CmdDone,
-    /// Command with data transfer complete event
+    /// Data transfer complete event
     DataDone,
     /// SDIO card custom event
     SdioIrq,
     /// Error occurred during transfer
     ErrOccured,
-    /// Number of events
+    /// Number of event types
     NumOfEvt,
 }
 
-/// Clock speed enumeration for MCI operations
+/// Clock speed enumeration.
 ///
-/// Defines the supported clock frequencies for different SD/MMC speed modes.
+/// Values are in Hz.
 #[derive(Debug, PartialEq)]
 pub enum MCIClkSpeed {
-    /// 400 KHz - Initialization speed
     ClkSpeed400KHz = 400_000,
-    /// 25 MHz - Default speed for SD cards
     ClkSpeed25Mhz = 25_000_000,
-    /// 26 MHz - MMC speed
+    /// MMC specific speed
     ClkSpeed26Mhz = 26_000_000,
-    /// 50 MHz - High speed for SD cards
     ClkSpeed50Mhz = 50_000_000,
-    /// 52 MHz - MMC high speed
+    /// MMC specific speed
     ClkSpeed52Mhz = 52_000_000,
-    /// 66 MHz - MMC higher speed
+    /// MMC specific speed
     ClkSpeed66Mhz = 66_000_000,
-    /// 100 MHz - UHS-I SDR104 / MMC HS200
     ClkSpeed100Mhz = 100_000_000,
 }
 
@@ -144,139 +129,166 @@ impl From<u32> for MCIClkSpeed {
     }
 }
 
-/// Register Map
-///
-/// Register offsets from the base address of an SD device.
-/// @{ */
-/// Controller configuration register offset
+#[inline(always)]
+pub unsafe fn dsb() {
+    core::arch::asm!("dsb sy");
+    core::arch::asm!("isb sy");
+}
+
+#[inline(always)]
+pub unsafe fn flush(addr: *const u8, size: usize) {
+    let mut addr = addr as usize;
+    let end = addr + size;
+    while addr < end {
+        asm!("dc civac, {0}", in(reg) addr, options(nostack, preserves_flags));
+        addr += 64;
+    }
+    dsb();
+}
+
+#[inline(always)]
+pub unsafe fn invalidate(addr: *const u8, size: usize) {
+    const CACHE_LINE_SIZE: usize = 64;
+    
+    let start_addr = (addr as usize) & !(CACHE_LINE_SIZE - 1);
+    let end_addr = (addr as usize + size + CACHE_LINE_SIZE - 1) & !(CACHE_LINE_SIZE - 1);
+    
+    let mut current_addr = start_addr;
+    while current_addr < end_addr {
+        asm!("dc ivac, {0}", in(reg) current_addr, options(nostack, preserves_flags));
+        current_addr += CACHE_LINE_SIZE;
+    }
+    
+    asm!("dsb sy");
+    asm!("isb");
+}
+
+/** @name Register Map
+ *
+ * Register offsets from the base address of an SD device.
+ * @{
+ */
+/// Controller configuration register
 pub const FSDIF_CNTRL_OFFSET: u32 = 0x00;
-/// Power enable register offset
+/// Power enable register
 pub const FSDIF_PWREN_OFFSET: u32 = 0x04;
-/// Clock divider register offset
+/// Clock divider register
 pub const FSDIF_CLKDIV_OFFSET: u32 = 0x08;
-/// Clock enable register offset
+/// Clock enable register
 pub const FSDIF_CLKENA_OFFSET: u32 = 0x10;
-/// Timeout register offset
+/// Timeout register
 pub const FSDIF_TMOUT_OFFSET: u32 = 0x14;
-/// Card type register offset
+/// Card type register
 pub const FSDIF_CTYPE_OFFSET: u32 = 0x18;
-/// Block size register offset
+/// Block size register
 pub const FSDIF_BLK_SIZ_OFFSET: u32 = 0x1C;
-/// Byte count register offset
+/// Byte count register
 pub const FSDIF_BYT_CNT_OFFSET: u32 = 0x20;
-/// Interrupt mask register offset
+/// Interrupt mask register
 pub const FSDIF_INT_MASK_OFFSET: u32 = 0x24;
-/// Command argument register offset
+/// Command argument register
 pub const FSDIF_CMD_ARG_OFFSET: u32 = 0x28;
-/// Command register offset
+/// Command register
 pub const FSDIF_CMD_OFFSET: u32 = 0x2C;
-/// Response register 0 offset
+/// Response register 0
 pub const FSDIF_RESP0_OFFSET: u32 = 0x30;
-/// Response register 1 offset
+/// Response register 1
 pub const FSDIF_RESP1_OFFSET: u32 = 0x34;
-/// Response register 2 offset
+/// Response register 2
 pub const FSDIF_RESP2_OFFSET: u32 = 0x38;
-/// Response register 3 offset
+/// Response register 3
 pub const FSDIF_RESP3_OFFSET: u32 = 0x3C;
-/// Masked interrupt status register offset
+/// Masked interrupt status register
 pub const FSDIF_MASKED_INTS_OFFSET: u32 = 0x40;
-/// Raw interrupt status register offset
+/// Raw interrupt status register
 pub const FSDIF_RAW_INTS_OFFSET: u32 = 0x44;
-/// Status register offset
+/// Status register
 pub const FSDIF_STATUS_OFFSET: u32 = 0x48;
-/// FIFO threshold watermark register offset
+/// FIFO threshold watermark register
 pub const FSDIF_FIFOTH_OFFSET: u32 = 0x4C;
-/// Card detect register offset
+/// Card detect register
 pub const FSDIF_CARD_DETECT_OFFSET: u32 = 0x50;
-/// Card write protect register offset
+/// Card write protect register
 pub const FSDIF_CARD_WRTPRT_OFFSET: u32 = 0x54;
-/// CIU ready register offset
+/// CIU ready status
 pub const FSDIF_CKSTS_OFFSET: u32 = 0x58;
-/// Transferred CIU card byte count register offset
+/// Transferred CIU card byte count register
 pub const FSDIF_TRAN_CARD_CNT_OFFSET: u32 = 0x5C;
-/// Transferred host to FIFO byte count register offset
+/// Transferred host to FIFO byte count register
 pub const FSDIF_TRAN_FIFO_CNT_OFFSET: u32 = 0x60;
-/// Debounce count register offset
+/// Debounce count register
 pub const FSDIF_DEBNCE_OFFSET: u32 = 0x64;
-/// User ID register offset
+/// User ID register
 pub const FSDIF_UID_OFFSET: u32 = 0x68;
-/// Controller version ID register offset
+/// Controller version ID register
 pub const FSDIF_VID_OFFSET: u32 = 0x6C;
-/// Hardware configuration register offset
+/// Hardware configuration register
 pub const FSDIF_HWCONF_OFFSET: u32 = 0x70;
-/// UHS-I register offset
+/// UHS-I register
 pub const FSDIF_UHS_REG_OFFSET: u32 = 0x74;
-/// Card reset register offset
+/// Card reset register
 pub const FSDIF_CARD_RESET_OFFSET: u32 = 0x78;
-/// Bus mode register offset
+/// Bus mode register
 pub const FSDIF_BUS_MODE_OFFSET: u32 = 0x80;
-/// Descriptor list low base address register offset
+/// Descriptor list low base address register
 pub const FSDIF_DESC_LIST_ADDRL_OFFSET: u32 = 0x88;
-/// Descriptor list high base address register offset
+/// Descriptor list high base address register
 pub const FSDIF_DESC_LIST_ADDRH_OFFSET: u32 = 0x8C;
-/// Internal DMAC status register offset
+/// Internal DMAC status register
 pub const FSDIF_DMAC_STATUS_OFFSET: u32 = 0x90;
-/// Internal DMAC interrupt enable register offset
+/// Internal DMAC interrupt enable register
 pub const FSDIF_DMAC_INT_EN_OFFSET: u32 = 0x94;
-/// Current host descriptor low address register offset
+/// Current host descriptor low address register
 pub const FSDIF_CUR_DESC_ADDRL_OFFSET: u32 = 0x98;
-/// Current host descriptor high address register offset
+/// Current host descriptor high address register
 pub const FSDIF_CUR_DESC_ADDRH_OFFSET: u32 = 0x9C;
-/// Current buffer low address register offset
+/// Current buffer low address register
 pub const FSDIF_CUR_BUF_ADDRL_OFFSET: u32 = 0xA0;
-/// Current buffer high address register offset
+/// Current buffer high address register
 pub const FSDIF_CUR_BUF_ADDRH_OFFSET: u32 = 0xA4;
-/// Card threshold control register offset
+/// Card threshold control register
 pub const FSDIF_CARD_THRCTL_OFFSET: u32 = 0x100;
-/// UHS register extension offset
+/// UHS register extension
 pub const FSDIF_CLK_SRC_OFFSET: u32 = 0x108;
-/// EMMC DDR register offset
+/// EMMC DDR register
 pub const FSDIF_EMMC_DDR_REG_OFFSET: u32 = 0x10C;
-/// Enable phase shift register offset
+/// Enable phase shift register
 pub const FSDIF_ENABLE_SHIFT_OFFSET: u32 = 0x110;
-/// Data FIFO access offset
+/// Data FIFO access
 pub const FSDIF_DATA_OFFSET: u32 = 0x200;
 
-/// Timeout for retries in polling loops
+/// Timeout for retry operations
 pub const RETRIES_TIMEOUT: usize = 50000;
-/// Command timeout in milliseconds
-pub const COMMAND_TIMEOUT: u32 = 5000;
 /// Delay in microseconds
 pub const FSDIF_DELAY_US: u32 = 5;
-/// Maximum FIFO count for PIO transfers
+/// Maximum FIFO count
 pub const MCI_MAX_FIFO_CNT: u32 = 0x800;
 
-/// Maximum number of command retries
+/// Maximum command retries
 pub const FSL_SDMMC_MAX_CMD_RETRIES: u32 = 10;
 
-/// FSDIF instance 0 ID
+/// FSDIF0 instance ID
 pub const FSDIF0_ID: u32 = 0;
-/// FSDIF instance 1 ID
+/// FSDIF1 instance ID
 pub const FSDIF1_ID: u32 = 1;
 
-/// Component ready magic value
+/// Component ready flag
 pub const FT_COMPONENT_IS_READY: u32 = 0x11111111;
 
-// DMA related constants
-/// Disable interrupt on completion for this descriptor
+// DMA-related
+/// Internal descriptor doesn't trigger TI/RI interrupt
 pub const FSDIF_IDMAC_DES0_DIC: u32 = 1 << 1;
-/// Last descriptor flag
+/// Last descriptor of data
 pub const FSDIF_IDMAC_DES0_LD: u32 = 1 << 2;
-/// First descriptor flag
+/// First descriptor of data
 pub const FSDIF_IDMAC_DES0_FD: u32 = 1 << 3;
-/// Chain to next descriptor flag
+/// Chain to next descriptor address
 pub const FSDIF_IDMAC_DES0_CH: u32 = 1 << 4;
-/// End of chain flag
+/// Chain has reached last descriptor
 pub const FSDIF_IDMAC_DES0_ER: u32 = 1 << 5;
-/// Card error summary in RINTSTS register
+/// RINTSTS register error summary
 pub const FSDIF_IDMAC_DES0_CES: u32 = 1 << 30;
-/// Descriptor owned by DMA, cleared to 0 after transfer
+/// Descriptor owned by DMA, cleared to 0 after transfer complete
 pub const FSDIF_IDMAC_DES0_OWN: u32 = 1 << 31;
 /// Maximum bytes per descriptor in chained mode
 pub const FSDIF_IDMAC_MAX_BUF_SIZE: u32 = 0x1000;
-
-// Interrupt related constants
-/// Number of interrupt events
-pub const FSDIF_NUM_OF_EVT: usize = 5;
-/// A register used by event_handler
-pub const TEMP_REGISTER_OFFSET: u32 = 0xFD0;

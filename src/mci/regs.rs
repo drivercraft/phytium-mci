@@ -1,36 +1,10 @@
-//! Register definitions for MCI hardware
-//!
-//! This module provides bitflag definitions for all MCI controller registers,
-//! allowing type-safe register access and manipulation.
-//!
-//! # Register Types
-//!
-//! The registers are defined using the `bitflags!` macro, which generates
-//! type-safe bit flag structs. Each register type implements the `FlagReg`
-//! trait for register access.
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use phytium_mci::mci::regs::{MCICtrl, MCIReg};
-//!
-//! let reg = MCIReg::new(base_addr);
-//! let ctrl = reg.read_reg::<MCICtrl>();
-//! if ctrl.contains(MCICtrl::INT_ENABLE) {
-//!     // Interrupt is enabled
-//! }
-//! ```
-
-#![allow(missing_docs)]
-
 use core::ops;
 
-use crate::mci::{consts::*, err::MCIError};
+use crate::mci::{constants::*, err::MCIError};
 use bitflags::bitflags;
 
 use super::{FlagReg, Reg};
 
-/// MCI register accessor type
 pub type MCIReg = Reg<MCIError>;
 
 impl Clone for MCIReg {
@@ -43,13 +17,13 @@ impl Clone for MCIReg {
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct MCICtrl: u32 {
-        const CONTROLLER_RESET = 1 << 0; // RW Reset controller, except DMA and FIFO
-        const FIFO_RESET = 1 << 1; // RW Reset FIFO, 1 is active
-        const DMA_RESET = 1 << 2; // RW Reset internal DMA, 1 is active
+        const CONTROLLER_RESET = 1 << 0; // RW Reset controller, except DMA, FIFO
+        const FIFO_RESET = 1 << 1; // RW Reset FIFO, 1 is valid
+        const DMA_RESET = 1 << 2; // RW Reset internal DMA, 1 is valid
         const INT_ENABLE = 1 << 4; // RW Global interrupt enable configuration, 1 to enable
         const DMA_ENABLE = 1 << 5; // RW External DMA mode enable
-        const READ_WAIT = 1 << 6; // RW SDIF read wait, 1 is active
-        const SEND_IRQ_RESPONSE = 1 << 7; // RW MMC interrupt auto response configuration, 1 is active
+        const READ_WAIT = 1 << 6; // RW SDIF read wait, 1 is valid
+        const SEND_IRQ_RESPONSE = 1 << 7; // RW MMC interrupt auto response configuration, 1 is valid
         const ABORT_READ_DATA = 1 << 8; // RW Read pause exception clear
         const SEND_CCSD = 1 << 9; // RW Send CCD (NOT USED)
         const SEND_AUTO_STOP_CCSD = 1 << 10; // RW Send CCD, auto STOP (NOT USED)
@@ -97,7 +71,7 @@ bitflags! {
         const CLK_DRV_BIT5 = 1 << 13;
         const CLK_DRV_BIT6 = 1 << 14;
         const CLK_DRV_BIT7 = 1 << 15;
-        const CLK_SAMPLE_BIT0 = 1 << 16; /* Sampling phase range setting */
+        const CLK_SAMPLE_BIT0 = 1 << 16; /* Sample phase range setting */
         const CLK_SAMPLE_BIT1 = 1 << 17;
         const CLK_SAMPLE_BIT2 = 1 << 18;
         const CLK_SAMPLE_BIT3 = 1 << 19;
@@ -134,7 +108,7 @@ impl MCIClkDiv {
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct MCIClkEn: u32 {
-        const CCLK_ENABLE = 1 << 0; /* RW 0: Clock disabled; 1: Clock enabled */
+        const CCLK_ENABLE = 1 << 0; /* RW 0：Clock disabled；1：Clock enabled */
         const CLKENA_CCLK_LOW_POWER = 1<<16; /* RW 0x0: non-low power; 0x1: low power */
     }
 }
@@ -148,38 +122,38 @@ bitflags! {
     pub struct MCITimeout: u32 {
         const MAX_DATA_TIMEOUT = 0xffffff; /* RW Read card timeout (in card clock units) */
         const MAX_RESP_TIMEOUT = 0xff; /* RW Response timeout (in card clock units) */
-        const RESP_TIMEOUT_BIT0 = 1 << 0; /* RW Bit 0 of response timeout */
-        const RESP_TIMEOUT_BIT1 = 1 << 1; /* RW Bit 1 of response timeout */
-        const RESP_TIMEOUT_BIT2 = 1 << 2; /* RW Bit 2 of response timeout */
-        const RESP_TIMEOUT_BIT3 = 1 << 3; /* RW Bit 3 of response timeout */
-        const RESP_TIMEOUT_BIT4 = 1 << 4; /* RW Bit 4 of response timeout */
-        const RESP_TIMEOUT_BIT5 = 1 << 5; /* RW Bit 5 of response timeout */
-        const RESP_TIMEOUT_BIT6 = 1 << 6; /* RW Bit 6 of response timeout */
-        const RESP_TIMEOUT_BIT7 = 1 << 7; /* RW Bit 7 of response timeout */
-        const DATA_TIMEOUT_BIT0 = 1 << 8; /* RW Bit 0 of read card timeout */
-        const DATA_TIMEOUT_BIT1 = 1 << 9; /* RW Bit 1 of read card timeout */
-        const DATA_TIMEOUT_BIT2 = 1 << 10; /* RW Bit 2 of read card timeout */
-        const DATA_TIMEOUT_BIT3 = 1 << 11; /* RW Bit 3 of read card timeout */
-        const DATA_TIMEOUT_BIT4 = 1 << 12; /* RW Bit 4 of read card timeout */
-        const DATA_TIMEOUT_BIT5 = 1 << 13; /* RW Bit 5 of read card timeout */
-        const DATA_TIMEOUT_BIT6 = 1 << 14; /* RW Bit 6 of read card timeout */
-        const DATA_TIMEOUT_BIT7 = 1 << 15; /* RW Bit 7 of read card timeout */
-        const DATA_TIMEOUT_BIT8 = 1 << 16; /* RW Bit 8 of read card timeout */
-        const DATA_TIMEOUT_BIT9 = 1 << 17; /* RW Bit 9 of read card timeout */
-        const DATA_TIMEOUT_BIT10 = 1 << 18; /* RW Bit 10 of read card timeout */
-        const DATA_TIMEOUT_BIT11 = 1 << 19; /* RW Bit 11 of read card timeout */
-        const DATA_TIMEOUT_BIT12 = 1 << 20; /* RW Bit 12 of read card timeout */
-        const DATA_TIMEOUT_BIT13 = 1 << 21; /* RW Bit 13 of read card timeout */
-        const DATA_TIMEOUT_BIT14 = 1 << 22; /* RW Bit 14 of read card timeout */
-        const DATA_TIMEOUT_BIT15 = 1 << 23; /* RW Bit 15 of read card timeout */
-        const DATA_TIMEOUT_BIT16 = 1 << 24; /* RW Bit 16 of read card timeout */
-        const DATA_TIMEOUT_BIT17 = 1 << 25; /* RW Bit 17 of read card timeout */
-        const DATA_TIMEOUT_BIT18 = 1 << 26; /* RW Bit 18 of read card timeout */
-        const DATA_TIMEOUT_BIT19 = 1 << 27; /* RW Bit 19 of read card timeout */
-        const DATA_TIMEOUT_BIT20 = 1 << 28; /* RW Bit 20 of read card timeout */
-        const DATA_TIMEOUT_BIT21 = 1 << 29; /* RW Bit 21 of read card timeout */
-        const DATA_TIMEOUT_BIT22 = 1 << 30; /* RW Bit 22 of read card timeout */
-        const DATA_TIMEOUT_BIT23 = 1 << 31; /* RW Bit 23 of read card timeout */
+        const RESP_TIMEOUT_BIT0 = 1 << 0; /* RW Response timeout bit 0 */
+        const RESP_TIMEOUT_BIT1 = 1 << 1; /* RW Response timeout bit 1 */
+        const RESP_TIMEOUT_BIT2 = 1 << 2; /* RW Response timeout bit 2 */
+        const RESP_TIMEOUT_BIT3 = 1 << 3; /* RW Response timeout bit 3 */
+        const RESP_TIMEOUT_BIT4 = 1 << 4; /* RW Response timeout bit 4 */
+        const RESP_TIMEOUT_BIT5 = 1 << 5; /* RW Response timeout bit 5 */
+        const RESP_TIMEOUT_BIT6 = 1 << 6; /* RW Response timeout bit 6 */
+        const RESP_TIMEOUT_BIT7 = 1 << 7; /* RW Response timeout bit 7 */
+        const DATA_TIMEOUT_BIT0 = 1 << 8; /* RW Read card timeout bit 0 */
+        const DATA_TIMEOUT_BIT1 = 1 << 9; /* RW Read card timeout bit 1 */
+        const DATA_TIMEOUT_BIT2 = 1 << 10; /* RW Read card timeout bit 2 */
+        const DATA_TIMEOUT_BIT3 = 1 << 11; /* RW Read card timeout bit 3 */
+        const DATA_TIMEOUT_BIT4 = 1 << 12; /* RW Read card timeout bit 4 */
+        const DATA_TIMEOUT_BIT5 = 1 << 13; /* RW Read card timeout bit 5 */
+        const DATA_TIMEOUT_BIT6 = 1 << 14; /* RW Read card timeout bit 6 */
+        const DATA_TIMEOUT_BIT7 = 1 << 15; /* RW Read card timeout bit 7 */
+        const DATA_TIMEOUT_BIT8 = 1 << 16; /* RW Read card timeout bit 8 */
+        const DATA_TIMEOUT_BIT9 = 1 << 17; /* RW Read card timeout bit 9 */
+        const DATA_TIMEOUT_BIT10 = 1 << 18; /* RW Read card timeout bit 10 */
+        const DATA_TIMEOUT_BIT11 = 1 << 19; /* RW Read card timeout bit 11 */
+        const DATA_TIMEOUT_BIT12 = 1 << 20; /* RW Read card timeout bit 12 */
+        const DATA_TIMEOUT_BIT13 = 1 << 21; /* RW Read card timeout bit 13 */
+        const DATA_TIMEOUT_BIT14 = 1 << 22; /* RW Read card timeout bit 14 */
+        const DATA_TIMEOUT_BIT15 = 1 << 23; /* RW Read card timeout bit 15 */
+        const DATA_TIMEOUT_BIT16 = 1 << 24; /* RW Read card timeout bit 16 */
+        const DATA_TIMEOUT_BIT17 = 1 << 25; /* RW Read card timeout bit 17 */
+        const DATA_TIMEOUT_BIT18 = 1 << 26; /* RW Read card timeout bit 18 */
+        const DATA_TIMEOUT_BIT19 = 1 << 27; /* RW Read card timeout bit 19 */
+        const DATA_TIMEOUT_BIT20 = 1 << 28; /* RW Read card timeout bit 20 */
+        const DATA_TIMEOUT_BIT21 = 1 << 29; /* RW Read card timeout bit 21 */
+        const DATA_TIMEOUT_BIT22 = 1 << 30; /* RW Read card timeout bit 22 */
+        const DATA_TIMEOUT_BIT23 = 1 << 31; /* RW Read card timeout bit 23 */
     }
 }
 
@@ -241,10 +215,12 @@ bitflags! {
         const EBE_BIT = 1 << 15;     /* RW End-bit error (read)/Write no CRC (EBE) */
         const SDIO_BIT = 1 << 16;    /* RW SDIO interrupt for card */
         const ALL_BITS = 0x1FFFF;    /* RW All bits */
+        // const INTS_CMD_MASK = 0x1546;
+        // const INTS_DATA_MASK = 0x2288;
         // const INTS_DATA_MASK = DTO_BIT | DCRC_BIT | DRTO_BIT | SBE_BCI_BIT;
         const INTS_DATA_MASK = 0x2288;
         // const INTS_CMD_MASK = RE_BIT | CMD_BIT | RCRC_BIT | RTO_BIT | HTO_BIT | HLE_BIT;
-        const INTS_CMD_MASK = 0x1546;
+        const INTS_CMD_MASK = 0x5446;
 
     }
 }
@@ -274,10 +250,8 @@ bitflags! {
         const EBE_BIT = 1 << 15;     /* RW End-bit error (read)/Write no CRC (EBE) */
         const SDIO_BIT = 1 << 16;    /* RW SDIO interrupt for card */
         const ALL_BITS = 0x1FFFF;    /* RW All bits */
-        // const INTS_DATA_MASK = DTO_BIT | DCRC_BIT | DRTO_BIT | SBE_BCI_BIT;
+        const INTS_CMD_MASK = 0x1546;
         const INTS_DATA_MASK = 0x2288;
-        // const INTS_CMD_MASK = RE_BIT | CMD_BIT | RCRC_BIT | RTO_BIT | HTO_BIT | HLE_BIT;
-        const INTS_CMD_MASK = 0x5446;
     }
 }
 
@@ -287,7 +261,6 @@ impl FlagReg for MCIMaskedInts {
 
 // FSDIF_RAW_INTS_OFFSET Register
 bitflags! {
-    #[derive(Clone, Copy)]
     pub struct MCIRawInts: u32 {
         const CD_BIT = 1 << 0;       /* RW Card detect (CD) */
         const RE_BIT = 1 << 1;       /* RW Response error (RE) */
@@ -309,8 +282,6 @@ bitflags! {
         const ALL_BITS = 0x1FFFF;    /* RW All bits */
         const INTS_CMD_MASK = 0x1546;
         const INTS_DATA_MASK = 0x2288;
-        // const CMD_ERR_INTS_MASK = RTO_BIT | RCRC_BIT | RE_BIT | DCRC_BIT | DRTO_BIT | SBE_BCI_BIT;
-        const CMD_ERR_INTS_MASK = 0x23C2;
     }
 }
 
@@ -324,7 +295,7 @@ bitflags! {
     pub struct MCICmd: u32 {
         const START = 1 << 31;                /* Start command */
         const USE_HOLD_REG = 1 << 29;         /* 0: Bypass HOLD register, 1: Enable HOLD register */
-        const VOLT_SWITCH = 1 << 28;          /* 0: No voltage switch, 1: Voltage switch */
+        const VOLT_SWITCH = 1 << 28;          /* 0: No voltage switching, 1: Voltage switching */
         const BOOT_MODE = 1 << 27;            /* 0: Mandatory boot, 1: Alternate boot */
         const DISABLE_BOOT = 1 << 26;         /* Abort boot process */
         const EXPECT_BOOT_ACK = 1 << 25;      /* 1: Expect boot ack */
@@ -333,18 +304,18 @@ bitflags! {
         const INIT = 1 << 15;                  /* 0: Do not send initialization sequence (80 cycles) before sending command, 1: Send */
         const STOP_ABORT = 1 << 14;           /* 1: Stop or abort command, used to stop current data transfer */
         const WAIT_PRVDATA_COMPLETE = 1 << 13; /* 1: Wait for previous data transfer to complete before sending command, 0: Send command immediately */
-        const SEND_AUTO_STOP = 1 << 12;       /* 1: Send stop command at end of data transfer */
+        const SEND_AUTO_STOP = 1 << 12;       /* 1: Send stop command when data transfer ends */
         const DAT_WRITE = 1 << 10;            /* 0: Read card, 1: Write card */
         const DAT_EXP = 1 << 9;                /* 0: Do not wait for data transfer, 1: Wait for data transfer */
         const RESP_CRC = 1 << 8;               /* 1: Check response CRC */
         const RESP_LONG = 1 << 7;              /* 0: Wait for short response from card, 1: Wait for long response from card */
         const RESP_EXP = 1 << 6;               /* 1: Wait for card response, 0: Command does not require card response */
-        const CMD_INDEX_BIT5 = 1 << 5;         /* Bit 5 of command index */
-        const CMD_INDEX_BIT4 = 1 << 4;         /* Bit 4 of command index */
-        const CMD_INDEX_BIT3 = 1 << 3;         /* Bit 3 of command index */
-        const CMD_INDEX_BIT2 = 1 << 2;         /* Bit 2 of command index */
-        const CMD_INDEX_BIT1 = 1 << 1;         /* Bit 1 of command index */
-        const CMD_INDEX_BIT0 = 1 << 0;         /* Bit 0 of command index */
+        const CMD_INDEX_BIT5 = 1 << 5;         /* Command index bit 5 */
+        const CMD_INDEX_BIT4 = 1 << 4;         /* Command index bit 4 */
+        const CMD_INDEX_BIT3 = 1 << 3;         /* Command index bit 3 */
+        const CMD_INDEX_BIT2 = 1 << 2;         /* Command index bit 2 */
+        const CMD_INDEX_BIT1 = 1 << 1;         /* Command index bit 1 */
+        const CMD_INDEX_BIT0 = 1 << 0;         /* Command index bit 0 */
     }
 }
 
@@ -366,36 +337,36 @@ impl MCICmd {
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct MCIStatus: u32 {
-        const FIFO_RX = 1 << 0;     /* RO, Reached FIFO_RX mark */
-        const FIFO_TX = 1 << 1;     /* RO, Reached FIFO_TX mark */
+        const FIFO_RX = 1 << 0;     /* RO, Reach FIFO_RX mark */
+        const FIFO_TX = 1 << 1;     /* RO, Reach FIFO_TX mark */
         const FIFO_EMPTY = 1 << 2;  /* RO, FIFO empty */
         const FIFO_FULL = 1 << 3;   /* RO, FIFO full */
         const CMD_FSM_BIT0 = 1 << 4; /* RO CMD FSM state */
         const CMD_FSM_BIT1 = 1 << 5; /* RO CMD FSM state */
         const CMD_FSM_BIT2 = 1 << 6; /* RO CMD FSM state */
         const CMD_FSM_BIT3 = 1 << 7; /* RO CMD FSM state */
-        const DATA3_STATUS = 1 << 8; /* RO DATA[3] card presence detect, 1: present */
+        const DATA3_STATUS = 1 << 8; /* RO DATA[3] card present detection, 1: present */
         const DATA_BUSY = 1 << 9;   /* RO 1: Card busy */
         const DATA_STATE_MC_BUSY = 1 << 10;  /* RO DATA TX|RX FSM busy  */
-        const RESP_INDEX_BIT0 = 1 << 11; /* RO Bit 0 of response index */
-        const RESP_INDEX_BIT1 = 1 << 12; /* RO Bit 1 of response index */
-        const RESP_INDEX_BIT2 = 1 << 13; /* RO Bit 2 of response index */
-        const RESP_INDEX_BIT3 = 1 << 14; /* RO Bit 3 of response index */
-        const RESP_INDEX_BIT4 = 1 << 15; /* RO Bit 4 of response index */
-        const RESP_INDEX_BIT5 = 1 << 16; /* RO Bit 5 of response index */
-        const FIFO_CNT_BIT0 = 1 << 17;   /* RO Bit 0 of data count in FIFO */
-        const FIFO_CNT_BIT1 = 1 << 18;   /* RO Bit 1 of data count in FIFO */
-        const FIFO_CNT_BIT2 = 1 << 19;   /* RO Bit 2 of data count in FIFO */
-        const FIFO_CNT_BIT3 = 1 << 20;   /* RO Bit 3 of data count in FIFO */
-        const FIFO_CNT_BIT4 = 1 << 21;   /* RO Bit 4 of data count in FIFO */
-        const FIFO_CNT_BIT5 = 1 << 22;   /* RO Bit 5 of data count in FIFO */
-        const FIFO_CNT_BIT6 = 1 << 23;   /* RO Bit 6 of data count in FIFO */
-        const FIFO_CNT_BIT7 = 1 << 24;   /* RO Bit 7 of data count in FIFO */
-        const FIFO_CNT_BIT8 = 1 << 25;   /* RO Bit 8 of data count in FIFO */
-        const FIFO_CNT_BIT9 = 1 << 26;   /* RO Bit 9 of data count in FIFO */
-        const FIFO_CNT_BIT10 = 1 << 27;  /* RO Bit 10 of data count in FIFO */
-        const FIFO_CNT_BIT11 = 1 << 28;  /* RO Bit 11 of data count in FIFO */
-        const FIFO_CNT_BIT12 = 1 << 29;  /* RO Bit 12 of data count in FIFO */
+        const RESP_INDEX_BIT0 = 1 << 11; /* RO Response index bit 0 */
+        const RESP_INDEX_BIT1 = 1 << 12; /* RO Response index bit 1 */
+        const RESP_INDEX_BIT2 = 1 << 13; /* RO Response index bit 2 */
+        const RESP_INDEX_BIT3 = 1 << 14; /* RO Response index bit 3 */
+        const RESP_INDEX_BIT4 = 1 << 15; /* RO Response index bit 4 */
+        const RESP_INDEX_BIT5 = 1 << 16; /* RO Response index bit 5 */
+        const FIFO_CNT_BIT0 = 1 << 17;   /* RO FIFO data count bit 0 */
+        const FIFO_CNT_BIT1 = 1 << 18;   /* RO FIFO data count bit 1 */
+        const FIFO_CNT_BIT2 = 1 << 19;   /* RO FIFO data count bit 2 */
+        const FIFO_CNT_BIT3 = 1 << 20;   /* RO FIFO data count bit 3 */
+        const FIFO_CNT_BIT4 = 1 << 21;   /* RO FIFO data count bit 4 */
+        const FIFO_CNT_BIT5 = 1 << 22;   /* RO FIFO data count bit 5 */
+        const FIFO_CNT_BIT6 = 1 << 23;   /* RO FIFO data count bit 6 */
+        const FIFO_CNT_BIT7 = 1 << 24;   /* RO FIFO data count bit 7 */
+        const FIFO_CNT_BIT8 = 1 << 25;   /* RO FIFO data count bit 8 */
+        const FIFO_CNT_BIT9 = 1 << 26;   /* RO FIFO data count bit 9 */
+        const FIFO_CNT_BIT10 = 1 << 27;  /* RO FIFO data count bit 10 */
+        const FIFO_CNT_BIT11 = 1 << 28;  /* RO FIFO data count bit 11 */
+        const FIFO_CNT_BIT12 = 1 << 29;  /* RO FIFO data count bit 12 */
         const DMA_ACK = 1 << 30;    /* RO DMA acknowledge */
         const DMA_REQ = 1 << 31;    /* RO DMA request */
     }
@@ -411,30 +382,30 @@ bitflags! {
         const DMA_TRANS_MASK = genmask!(30, 28); /* Burst size for multiple transfers */
         const RX_WMARK_MASK = genmask!(27, 16);  /* FIFO threshold when receiving data to card */
         const TX_WMARK_MASK = genmask!(11, 0);   /* FIFO threshold when transmitting data to card */
-        const TX_WMARK_BIT0 = 1 << 0;            /* Bit 0 of TX_WMARK */
-        const TX_WMARK_BIT1 = 1 << 1;            /* Bit 1 of TX_WMARK */
-        const TX_WMARK_BIT2 = 1 << 2;            /* Bit 2 of TX_WMARK */
-        const TX_WMARK_BIT3 = 1 << 3;            /* Bit 3 of TX_WMARK */
-        const TX_WMARK_BIT4 = 1 << 4;            /* Bit 4 of TX_WMARK */
-        const TX_WMARK_BIT5 = 1 << 5;            /* Bit 5 of TX_WMARK */
-        const TX_WMARK_BIT6 = 1 << 6;            /* Bit 6 of TX_WMARK */
-        const TX_WMARK_BIT7 = 1 << 7;            /* Bit 7 of TX_WMARK */
-        const TX_WMARK_BIT8 = 1 << 8;            /* Bit 8 of TX_WMARK */
-        const TX_WMARK_BIT9 = 1 << 9;            /* Bit 9 of TX_WMARK */
-        const TX_WMARK_BIT10 = 1 << 10;          /* Bit 10 of TX_WMARK */
-        const TX_WMARK_BIT11 = 1 << 11;          /* Bit 11 of TX_WMARK */
-        const RX_WMARK_BIT0 = 1 << 16;           /* Bit 0 of RX_WMARK */
-        const RX_WMARK_BIT1 = 1 << 17;           /* Bit 1 of RX_WMARK */
-        const RX_WMARK_BIT2 = 1 << 18;           /* Bit 2 of RX_WMARK */
-        const RX_WMARK_BIT3 = 1 << 19;           /* Bit 3 of RX_WMARK */
-        const RX_WMARK_BIT4 = 1 << 20;           /* Bit 4 of RX_WMARK */
-        const RX_WMARK_BIT5 = 1 << 21;           /* Bit 5 of RX_WMARK */
-        const RX_WMARK_BIT6 = 1 << 22;           /* Bit 6 of RX_WMARK */
-        const RX_WMARK_BIT7 = 1 << 23;           /* Bit 7 of RX_WMARK */
-        const RX_WMARK_BIT8 = 1 << 24;           /* Bit 8 of RX_WMARK */
-        const RX_WMARK_BIT9 = 1 << 25;           /* Bit 9 of RX_WMARK */
-        const RX_WMARK_BIT10 = 1 << 26;          /* Bit 10 of RX_WMARK */
-        const RX_WMARK_BIT11 = 1 << 27;          /* Bit 11 of RX_WMARK */
+        const TX_WMARK_BIT0 = 1 << 0;            /* TX_WMARK bit 0 */
+        const TX_WMARK_BIT1 = 1 << 1;            /* TX_WMARK bit 1 */
+        const TX_WMARK_BIT2 = 1 << 2;            /* TX_WMARK bit 2 */
+        const TX_WMARK_BIT3 = 1 << 3;            /* TX_WMARK bit 3 */
+        const TX_WMARK_BIT4 = 1 << 4;            /* TX_WMARK bit 4 */
+        const TX_WMARK_BIT5 = 1 << 5;            /* TX_WMARK bit 5 */
+        const TX_WMARK_BIT6 = 1 << 6;            /* TX_WMARK bit 6 */
+        const TX_WMARK_BIT7 = 1 << 7;            /* TX_WMARK bit 7 */
+        const TX_WMARK_BIT8 = 1 << 8;            /* TX_WMARK bit 8 */
+        const TX_WMARK_BIT9 = 1 << 9;            /* TX_WMARK bit 9 */
+        const TX_WMARK_BIT10 = 1 << 10;          /* TX_WMARK bit 10 */
+        const TX_WMARK_BIT11 = 1 << 11;          /* TX_WMARK bit 11 */
+        const RX_WMARK_BIT0 = 1 << 16;           /* RX_WMARK bit 0 */
+        const RX_WMARK_BIT1 = 1 << 17;           /* RX_WMARK bit 1 */
+        const RX_WMARK_BIT2 = 1 << 18;           /* RX_WMARK bit 2 */
+        const RX_WMARK_BIT3 = 1 << 19;           /* RX_WMARK bit 3 */
+        const RX_WMARK_BIT4 = 1 << 20;           /* RX_WMARK bit 4 */
+        const RX_WMARK_BIT5 = 1 << 21;           /* RX_WMARK bit 5 */
+        const RX_WMARK_BIT6 = 1 << 22;           /* RX_WMARK bit 6 */
+        const RX_WMARK_BIT7 = 1 << 23;           /* RX_WMARK bit 7 */
+        const RX_WMARK_BIT8 = 1 << 24;           /* RX_WMARK bit 8 */
+        const RX_WMARK_BIT9 = 1 << 25;           /* RX_WMARK bit 9 */
+        const RX_WMARK_BIT10 = 1 << 26;          /* RX_WMARK bit 10 */
+        const RX_WMARK_BIT11 = 1 << 27;          /* RX_WMARK bit 11 */
         const DMA_TRANS_BIT0 = 1 << 28;          /* DMA */
         const DMA_TRANS_BIT1 = 1 << 29;          /* DMA */
         const DMA_TRANS_BIT2 = 1 << 30;          /* DMA */
@@ -494,7 +465,7 @@ impl FlagReg for MCICardDetect {
 // FSDIF_CARD_WRTPRT_OFFSET Register
 bitflags! {
     pub struct MCICardWrtp: u32 {
-        const WRITE_PROTECTED = 1 << 0; /* 1: Write protected; 0: Not write protected */
+        const WRITE_PROTECTED = 1 << 0; /* 1: Write protected; 0: No write protection */
     }
 }
 
@@ -517,7 +488,7 @@ impl FlagReg for MCIClkSts {
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct MCIUhsReg: u32 {
-        const VOLT_180 = 1 << 0; /* RW External regulator interface voltage 0: 3.3v, 1: 1.8v */
+        const VOLT_180 = 1 << 0; /* RW External voltage regulator interface voltage 0: 3.3v, 1: 1.8v */
         const DDR = 1 << 16;     /* RW DDR mode */
     }
 }
@@ -542,7 +513,7 @@ impl FlagReg for MCICardReset {
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct MCIBusMode: u32 {
-        const SWR = 1 << 0; /* RW Soft reset, resets idma internal registers */
+        const SWR = 1 << 0; /* RW Soft reset, reset idma internal registers */
         const FB = 1 << 1;  /* RW Fixed burst */
         const DE = 1 << 7;  /* RW idma enable */
         const PBL_BIT0 = 1 << 8; /* R0 Transfer burst length */
@@ -557,10 +528,9 @@ impl FlagReg for MCIBusMode {
 
 // FSDIF_DMAC_STATUS_OFFSET Register
 bitflags! {
-    #[derive(Clone, Copy)]
     pub struct MCIDMACStatus: u32 {
-        const TI = 1 << 0;  /* RW Transmit interrupt. Indicates linked list data transmission completed */
-        const RI = 1 << 1;  /* RW Receive interrupt. Indicates linked list data reception completed */
+        const TI = 1 << 0;  /* RW Transmit interrupt. Indicates linked list data transmission complete */
+        const RI = 1 << 1;  /* RW Receive interrupt. Indicates linked list data reception complete */
         const FBE = 1 << 2; /* RW Fatal bus error interrupt */
         const DU_BIT0 = 1 << 3;  /* RW Descriptor unavailable interrupt */
         const DU_BIT1 = 1 << 4;  /* RW Descriptor unavailable interrupt */
@@ -592,8 +562,6 @@ bitflags! {
         const ALL_BITS = 0x3ff;
         const STATUS_EB_TX = 0b001;
         const STATUS_EB_RX = 0b010;
-        // const DMAC_ERR_INTS_MASK = FBE | DU_BIT1 | NIS | AIS
-        const DMAC_ERR_INTS_MASK = 0x314;
     }
 }
 
@@ -612,8 +580,7 @@ bitflags! {
         const NIS = 1 << 8; /* RW Normal interrupt summary enable */
         const AIS = 1 << 9; /* RW Abnormal interrupt summary enable */
         const ALL_BITS = 0x3ff;
-        // const INTS_MASK = FBE | DU | NIS | AIS;
-        const INTS_MASK = 0x314;
+        const INTS_MASK = MCIDMACIntEn::FBE.bits() | MCIDMACIntEn::DU.bits() | MCIDMACIntEn::NIS.bits() | MCIDMACIntEn::AIS.bits();
     }
 }
 
@@ -624,9 +591,9 @@ impl FlagReg for MCIDMACIntEn {
 // FSDIF_CARD_THRCTL_OFFSET Register
 bitflags! {
     pub struct MCICardThrctl: u32 {
-        const CARDRD = 1 << 0;   /* RW Card read threshold enable */
-        const BUSY_CLR = 1 << 1; /* RW Busy clear interrupt */
-        const CARDWR = 1 << 2;   /* RO Card write threshold enable */
+        const CARDRD = 1 << 0;   /* RW Read card threshold enable */
+        const BUSY_CLR = 1 << 1; /* RW busy clear interrupt */
+        const CARDWR = 1 << 2;   /* RO Write card threshold enable */
         const FIFO_DEPTH_BIT0 = 1 << 16; /* RW FIFO depth */
         const FIFO_DEPTH_BIT1 = 1 << 17; /* RW FIFO depth */
         const FIFO_DEPTH_BIT2 = 1 << 18; /* RW FIFO depth */
@@ -662,22 +629,22 @@ bitflags! {
         const UHS_EXT_MMC_VOLT = 1 << 0;         /* RW 1.2V power supply selection */
         const UHS_EXT_CLK_ENA = 1 << 1;          /* RW External clock, CIU clock enable */
         const UHS_EXT_CLK_MUX = 1 << 31;         /* RW External clock selection */
-        const UHS_CLK_DIV_MASK = genmask!(14, 8); /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT0 = 1 << 8;         /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT1 = 1 << 9;         /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT2 = 1 << 10;        /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT3 = 1 << 11;        /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT4 = 1 << 12;        /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT5 = 1 << 13;        /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_DIV_BIT6 = 1 << 14;        /* RW Division factor, ciu_f = clk_div_ctrl + 1, min=1*/
-        const UHS_CLK_SAMP_MASK = genmask!(22, 16); /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT0 = 1 << 16;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT1 = 1 << 17;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT2 = 1 << 18;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT3 = 1 << 19;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT4 = 1 << 20;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT5 = 1 << 21;         /* RW Sampling phase parameter, relative to ciu clock phase point */
-        const UHS_CLK_SAMP_BIT6 = 1 << 22;         /* RW Sampling phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_DIV_MASK = genmask!(14, 8); /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT0 = 1 << 8;         /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT1 = 1 << 9;         /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT2 = 1 << 10;        /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT3 = 1 << 11;        /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT4 = 1 << 12;        /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT5 = 1 << 13;        /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_DIV_BIT6 = 1 << 14;        /* RW Division coefficient, ciu_f = clk_div_ctrl + 1, min=1*/
+        const UHS_CLK_SAMP_MASK = genmask!(22, 16); /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT0 = 1 << 16;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT1 = 1 << 17;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT2 = 1 << 18;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT3 = 1 << 19;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT4 = 1 << 20;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT5 = 1 << 21;         /* RW Sample phase parameter, relative to ciu clock phase point */
+        const UHS_CLK_SAMP_BIT6 = 1 << 22;         /* RW Sample phase parameter, relative to ciu clock phase point */
         const UHS_CLK_DRV_MASK = genmask!(30, 24); /* RW Output phase parameter, relative to ciu clock phase point */
         const UHS_CLK_DRV_BIT0 = 1 << 24;         /* RW Output phase parameter, relative to ciu clock phase point */
         const UHS_CLK_DRV_BIT1 = 1 << 25;         /* RW Output phase parameter, relative to ciu clock phase point */
@@ -891,38 +858,38 @@ impl FlagReg for MCIBytCnt {
 // FSDIF_BLK_SIZ_OFFSET Register
 bitflags! {
     pub struct MCIBlkSiz: u32 {
-        const BIT0 = 1 << 0; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT1 = 1 << 1; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT2 = 1 << 2; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT3 = 1 << 3; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT4 = 1 << 4; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT5 = 1 << 5; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT6 = 1 << 6; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT7 = 1 << 7; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT8 = 1 << 8; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT9 = 1 << 9; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT10 = 1 << 10; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT11 = 1 << 11; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT12 = 1 << 12; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT13 = 1 << 13; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT14 = 1 << 14; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT15 = 1 << 15; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT16 = 1 << 16; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT17 = 1 << 17; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT18 = 1 << 18; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT19 = 1 << 19; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT20 = 1 << 20; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT21 = 1 << 21; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT22 = 1 << 22; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT23 = 1 << 23; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT24 = 1 << 24; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT25 = 1 << 25; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT26 = 1 << 26; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT27 = 1 << 27; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT28 = 1 << 28; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT29 = 1 << 29; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT30 = 1 << 30; /* RW 1: 512 byte block size, 0: 512 byte block size */
-        const BIT31 = 1 << 31; /* RW 1: 512 byte block size, 0: 512 byte block size */
+        const BIT0 = 1 << 0; /* RW Block size bit 0 */
+        const BIT1 = 1 << 1; /* RW Block size bit 1 */
+        const BIT2 = 1 << 2; /* RW Block size bit 2 */
+        const BIT3 = 1 << 3; /* RW Block size bit 3 */
+        const BIT4 = 1 << 4; /* RW Block size bit 4 */
+        const BIT5 = 1 << 5; /* RW Block size bit 5 */
+        const BIT6 = 1 << 6; /* RW Block size bit 6 */
+        const BIT7 = 1 << 7; /* RW Block size bit 7 */
+        const BIT8 = 1 << 8; /* RW Block size bit 8 */
+        const BIT9 = 1 << 9; /* RW Block size bit 9 */
+        const BIT10 = 1 << 10; /* RW Block size bit 10 */
+        const BIT11 = 1 << 11; /* RW Block size bit 11 */
+        const BIT12 = 1 << 12; /* RW Block size bit 12 */
+        const BIT13 = 1 << 13; /* RW Block size bit 13 */
+        const BIT14 = 1 << 14; /* RW Block size bit 14 */
+        const BIT15 = 1 << 15; /* RW Block size bit 15 */
+        const BIT16 = 1 << 16; /* RW Block size bit 16 */
+        const BIT17 = 1 << 17; /* RW Block size bit 17 */
+        const BIT18 = 1 << 18; /* RW Block size bit 18 */
+        const BIT19 = 1 << 19; /* RW Block size bit 19 */
+        const BIT20 = 1 << 20; /* RW Block size bit 20 */
+        const BIT21 = 1 << 21; /* RW Block size bit 21 */
+        const BIT22 = 1 << 22; /* RW Block size bit 22 */
+        const BIT23 = 1 << 23; /* RW Block size bit 23 */
+        const BIT24 = 1 << 24; /* RW Block size bit 24 */
+        const BIT25 = 1 << 25; /* RW Block size bit 25 */
+        const BIT26 = 1 << 26; /* RW Block size bit 26 */
+        const BIT27 = 1 << 27; /* RW Block size bit 27 */
+        const BIT28 = 1 << 28; /* RW Block size bit 28 */
+        const BIT29 = 1 << 29; /* RW Block size bit 29 */
+        const BIT30 = 1 << 30; /* RW Block size bit 30 */
+        const BIT31 = 1 << 31; /* RW Block size bit 31 */
         const ALL_BITS = 0xFFFFFFFF;
     }
 }
@@ -1580,44 +1547,4 @@ bitflags! {
 }
 impl FlagReg for MCIEnableShift {
     const REG: u32 = FSDIF_ENABLE_SHIFT_OFFSET;
-}
-
-bitflags! {
-    pub struct IrqTempRegister: u32 {
-        const BIT0 = 1 << 0;
-        const BIT1 = 1 << 1;
-        const BIT2 = 1 << 2;
-        const BIT3 = 1 << 3;
-        const BIT4 = 1 << 4;
-        const BIT5 = 1 << 5;
-        const BIT6 = 1 << 6;
-        const BIT7 = 1 << 7;
-        const BIT8 = 1 << 8;
-        const BIT9 = 1 << 9;
-        const BIT10 = 1 << 10;
-        const BIT11 = 1 << 11;
-        const BIT12 = 1 << 12;
-        const BIT13 = 1 << 13;
-        const BIT14 = 1 << 14;
-        const BIT15 = 1 << 15;
-        const BIT16 = 1 << 16;
-        const BIT17 = 1 << 17;
-        const BIT18 = 1 << 18;
-        const BIT19 = 1 << 19;
-        const BIT20 = 1 << 20;
-        const BIT21 = 1 << 21;
-        const BIT22 = 1 << 22;
-        const BIT23 = 1 << 23;
-        const BIT24 = 1 << 24;
-        const BIT25 = 1 << 25;
-        const BIT26 = 1 << 26;
-        const BIT27 = 1 << 27;
-        const BIT28 = 1 << 28;
-        const BIT29 = 1 << 29;
-        const BIT30 = 1 << 30;
-        const BIT31 = 1 << 31;
-    }
-}
-impl FlagReg for IrqTempRegister {
-    const REG: u32 = TEMP_REGISTER_OFFSET;
 }

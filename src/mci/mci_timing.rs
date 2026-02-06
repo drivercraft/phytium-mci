@@ -1,35 +1,46 @@
-//! Timing and delay configuration for MCI operations
+//! # MCI Timing Configuration
 //!
-//! This module provides timing parameters and I/O pad delay configuration
-//! for different SD/MMC operating modes and clock frequencies.
+//! This module provides timing configuration for different SD/MMC operating modes.
+//! It includes clock dividers, source selection, and pad delay settings for
+//! various transfer speeds.
+//!
+//! ## Predefined Timing Configurations
+//!
+//! - `MMC_SD_400K_HZ`: Initialization mode (400 kHz)
+//! - `SD_25MHZ`: SD default speed (25 MHz)
+//! - `SD_50MHZ`: SD high speed (50 MHz)
+//! - `SD_100MHZ`: SD UHS-I SDR50/DDR50 (100 MHz)
+//! - `MMC_26MHZ`: MMC legacy speed (26 MHz)
+//! - `MMC_52MHZ`: MMC high speed (52 MHz)
+//! - `MMC_66MHZ`: MMC HS200 (66 MHz)
+//! - `MMC_100MHZ`: MMC HS200 (100 MHz)
 
-use crate::iopad::IoPad;
 use crate::iopad::constants::{FioPadDelay, FioPadDelayDir, FioPadDelayType};
 use crate::iopad::regs::{Aj49Reg1, J53Reg1, XReg1};
+use crate::iopad::IoPad;
 use crate::regs::BitsOps;
 
-use super::consts::*;
+use super::constants::*;
 
-/// Timing configuration for MCI operations
+/// MCI timing configuration structure.
 ///
-/// Contains clock divider, source, and I/O pad delay settings for
-/// a specific operating mode.
+/// This structure contains all timing-related parameters for SD/MMC operations
+/// including clock configuration and pad delay settings.
 pub struct MCITiming {
+    /// Whether to use hold register
     use_hold: bool,
+    /// Clock divider value
     clk_div: u32,
+    /// Clock source selection
     clk_src: u32,
+    /// Phase shift value
     shift: u32,
-    pad_delay: MCIPadDelay, //* Used to adjust IO delay */
-}
-
-impl Default for MCITiming {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Pad delay setting for signal timing
+    pad_delay: MCIPadDelay,
 }
 
 impl MCITiming {
-    /// Creates a new timing configuration with default values
+    /// Create a new default timing configuration.
     pub fn new() -> Self {
         MCITiming {
             use_hold: false,
@@ -41,14 +52,24 @@ impl MCITiming {
     }
 }
 
+/// Pad delay configuration enum.
 #[derive(Debug, PartialEq)]
 enum MCIPadDelay {
+    /// Apply pad delay settings
     Set,
+    /// Remove pad delay settings
     Unset,
+    /// No pad delay configuration
     None,
 }
 
 impl MCITiming {
+    /// Apply pad delay settings to the I/O pad.
+    ///
+    /// # Arguments
+    ///
+    /// * `iopad` - Mutable reference to the I/O pad
+    /// * `mci_id` - MCI controller ID
     pub(crate) fn pad_delay(&self, iopad: &mut IoPad, mci_id: MCIId) {
         match self.pad_delay {
             MCIPadDelay::Set => set_pad_delay(iopad, mci_id),
@@ -57,24 +78,28 @@ impl MCITiming {
         }
     }
 
+    /// Get the clock source value.
     pub(crate) fn clk_src(&self) -> u32 {
         self.clk_src
     }
 
+    /// Get the clock divider value.
     pub(crate) fn clk_div(&self) -> u32 {
         self.clk_div
     }
 
+    /// Check if hold register should be used.
     pub(crate) fn use_hold(&self) -> bool {
         self.use_hold
     }
 
+    /// Get the phase shift value.
     pub(crate) fn shift(&self) -> u32 {
         self.shift
     }
 }
 
-/// Timing configuration for 400 KHz (initialization)
+/// Initialization mode timing (400 kHz).
 pub const MMC_SD_400K_HZ: MCITiming = MCITiming {
     use_hold: true,
     clk_div: 0x7e7dfa,
@@ -83,7 +108,7 @@ pub const MMC_SD_400K_HZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Unset,
 };
 
-/// Timing configuration for SD 25 MHz (default speed)
+/// SD default speed mode timing (25 MHz).
 pub const SD_25MHZ: MCITiming = MCITiming {
     use_hold: true,
     clk_div: 0x030204,
@@ -92,7 +117,7 @@ pub const SD_25MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Unset,
 };
 
-/// Timing configuration for SD 50 MHz (high speed)
+/// SD high speed mode timing (50 MHz).
 pub const SD_50MHZ: MCITiming = MCITiming {
     use_hold: true,
     clk_div: 0x030204,
@@ -101,7 +126,7 @@ pub const SD_50MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Set,
 };
 
-/// Timing configuration for SD 100 MHz (UHS-I SDR104)
+/// SD UHS-I timing (100 MHz).
 pub const SD_100MHZ: MCITiming = MCITiming {
     use_hold: false,
     clk_div: 0x010002,
@@ -110,7 +135,7 @@ pub const SD_100MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Set,
 };
 
-/// Timing configuration for MMC 26 MHz
+/// MMC legacy speed timing (26 MHz).
 pub const MMC_26MHZ: MCITiming = MCITiming {
     use_hold: true,
     clk_div: 0x030204,
@@ -119,7 +144,7 @@ pub const MMC_26MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Set,
 };
 
-/// Timing configuration for MMC 52 MHz (high speed)
+/// MMC high speed timing (52 MHz).
 pub const MMC_52MHZ: MCITiming = MCITiming {
     use_hold: false,
     clk_div: 0x030204,
@@ -128,7 +153,7 @@ pub const MMC_52MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Set,
 };
 
-/// Timing configuration for MMC 66 MHz
+/// MMC HS200 timing (66 MHz).
 pub const MMC_66MHZ: MCITiming = MCITiming {
     use_hold: false,
     clk_div: 0x010002,
@@ -137,7 +162,7 @@ pub const MMC_66MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::None,
 };
 
-/// Timing configuration for MMC 100 MHz (HS200)
+/// MMC HS200 timing (100 MHz).
 pub const MMC_100MHZ: MCITiming = MCITiming {
     use_hold: false,
     clk_div: 0x010002,
@@ -146,16 +171,28 @@ pub const MMC_100MHZ: MCITiming = MCITiming {
     pad_delay: MCIPadDelay::Set,
 };
 
-/* Pin related definitions */
+/* Pin-related definitions */
+/// FSDIF0 SD clock output delay register type
 type Fsdif0SdCclkOutDelay = Aj49Reg1;
+/// FSDIF1 SD clock output delay register type
 type Fsdif1SdCclkOutDelay = J53Reg1;
 
-fn apply_delay_settings<T: XReg1 + BitsOps + 'static>(
+/// Apply delay settings to I/O pad.
+///
+/// # Arguments
+///
+/// * `iopad` - Mutable reference to the I/O pad
+/// * `coarse_delay` - Coarse delay value
+/// * `fine_delay` - Fine delay value
+/// * `enable` - Whether to enable the delay
+fn apply_delay_settings<T: XReg1 + BitsOps>(
     iopad: &mut IoPad,
     coarse_delay: FioPadDelay,
     fine_delay: FioPadDelay,
     enable: bool,
-) {
+) where
+    T: 'static,
+{
     iopad.delay_set::<T>(
         FioPadDelayDir::OutputDelay,
         FioPadDelayType::DelayCoarseTuning,
@@ -169,12 +206,12 @@ fn apply_delay_settings<T: XReg1 + BitsOps + 'static>(
     iopad.delay_enable_set::<T>(FioPadDelayDir::OutputDelay, enable);
 }
 
-/// Sets the I/O pad delay for high-speed operations
+/// Set pad delay for high-speed operation.
 ///
 /// # Arguments
 ///
-/// * `iopad` - I/O pad instance to configure
-/// * `mci_id` - MCI instance identifier
+/// * `iopad` - Mutable reference to the I/O pad
+/// * `mci_id` - MCI controller ID
 pub fn set_pad_delay(iopad: &mut IoPad, mci_id: MCIId) {
     match mci_id {
         MCIId::MCI0 => apply_delay_settings::<Fsdif0SdCclkOutDelay>(
@@ -192,12 +229,12 @@ pub fn set_pad_delay(iopad: &mut IoPad, mci_id: MCIId) {
     }
 }
 
-/// Unsets the I/O pad delay
+/// Unset pad delay (for low-speed operation).
 ///
 /// # Arguments
 ///
-/// * `iopad` - I/O pad instance to configure
-/// * `mci_id` - MCI instance identifier
+/// * `iopad` - Mutable reference to the I/O pad
+/// * `mci_id` - MCI controller ID
 pub fn unset_pad_delay(iopad: &mut IoPad, mci_id: MCIId) {
     match mci_id {
         MCIId::MCI0 => apply_delay_settings::<Fsdif0SdCclkOutDelay>(

@@ -1,22 +1,23 @@
-//! OSA (OS Abstraction) error types.
+//! # OSA Error Types
 //!
-//! This module defines error types for memory pool and buffer operations.
+//! This module defines error types for memory pool operations.
 
-/// Errors that can occur during memory pool or buffer operations.
+/// Memory pool error enumeration.
 #[derive(Debug)]
 pub enum FMempError {
-    /// Invalid buffer pointer or size
+    /// Invalid buffer
     InvalidBuf,
-    /// TLSF memory pool initialization failed
+    /// TLSF initialization error
     InitTlsfError,
-    /// Memory allocation failed (out of memory)
+    /// Memory allocation failed
     BadMalloc,
+    // PoolBuffer related errors
     /// PoolBuffer size too small to copy contents from a slice
     NotEnoughSpace,
-    /// PoolBuffer size is not aligned to the requested type size
+    /// PoolBuffer size isn't aligned to size::T
     SizeNotAligned,
 }
 
-/// Result type for memory pool operations
+/// Result type for memory pool operations.
 #[allow(unused)]
 pub type FMempStatus<T = ()> = Result<T, FMempError>;

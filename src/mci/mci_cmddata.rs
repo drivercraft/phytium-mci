@@ -1,22 +1,27 @@
-//! Command and data transfer structures
+//! # MCI Command and Data Structure
 //!
-//! This module defines the structures used to represent commands and
-//! their associated data transfers for SD/MMC operations.
+//! This module provides the combined command and data structure for MCI operations.
 
-use super::consts::*;
+use super::constants::*;
 use super::mci_data::MCIData;
 
-/// Command and data transfer structure
+/// MCI command and data transfer structure.
 ///
-/// Represents a complete command transaction including command index,
-/// argument, response, and optional data transfer.
+/// This structure combines command information with optional data transfer
+/// for complete SD/MMC operations.
 #[derive(Debug, Clone)]
 pub struct MCICmdData {
+    /// Command index
     cmdidx: u32,
+    /// Command argument
     cmdarg: u32,
+    /// Response data (up to 16 bytes)
     response: [u32; 4],
+    /// Command flags
     flag: MCICmdFlag,
+    /// Optional data transfer
     data: Option<MCIData>,
+    /// Transfer success status
     success: bool,
 }
 

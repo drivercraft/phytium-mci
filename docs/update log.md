@@ -24,7 +24,6 @@
   * `pub(crate) fn setup_dma_descriptor(&mut self, *data*: &MCIData) -> MCIResult`
   * `pub(crate) fn dma_transfer_data(&mut self, *data*: &MCIData) -> MCIResult`
 
-  
 
 * commit 532156：
 

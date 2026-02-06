@@ -1,71 +1,70 @@
-#![allow(dead_code)]
-
 use core::cell::{Cell, RefCell};
 use core::mem::take;
 use core::ptr::NonNull;
 use core::time::Duration;
 
 use alloc::vec::Vec;
+#[cfg(feature = "dma")]
+use dma_api::DSlice;
 use log::*;
 
+use super::constants::SDStatus;
 use super::MCIHost;
-use super::consts::SDStatus;
-use crate::aarch::dsb;
-use crate::invalidate;
-use crate::mci::consts::*;
+use crate::mci::constants::*;
 use crate::mci::mci_data::MCIData;
-use crate::mci::mci_dma::FSdifIDmaDesc;
 use crate::mci::regs::MCIIntMask;
-use crate::mci::{MCI, MCICmdData, MCIConfig};
-use crate::mci_host::MCIHostCardIntFn;
+use crate::mci::{MCICmdData, MCIConfig, MCI};
 use crate::mci_host::constants::*;
 use crate::mci_host::err::*;
 use crate::mci_host::mci_host_card_detect::MCIHostCardDetect;
 use crate::mci_host::mci_host_config::*;
+use crate::mci_host::mci_host_device::MCIHostDevice;
 use crate::mci_host::mci_host_transfer::MCIHostTransfer;
-use crate::mci_host::sd::consts::SdCmd;
-#[cfg(feature = "dma")]
-use crate::mmap;
+use crate::mci_host::sd::constants::SdCmd;
+use crate::mci_host::MCIHostCardIntFn;
+use crate::osa::osa_alloc_aligned;
 use crate::osa::pool_buffer::PoolBuffer;
-use crate::sd::consts::SD_BLOCK_SIZE;
+use crate::sd::constants::SD_BLOCK_SIZE;
 use crate::tools::swap_half_word_byte_sequence_u32;
-use crate::{IoPad, flush, sleep};
+use crate::{sleep, IoPad};
+
+#[cfg(feature = "dma")]
+use crate::mci::mci_dma::FSdifIDmaDesc;
 
 pub(crate) struct SDIFDev {
-    /// SDIF hardware controller
-    hc: RefCell<MCI>,
-    /// SDIF configuration
-    hc_cfg: RefCell<MCIConfig>,
-    /// DMA descriptor pointer, used for managing data transfer
-    rw_desc: PoolBuffer,
-    /// Descriptor count, representing the number of DMA descriptors
-    desc_num: Cell<u32>,
+    hc: RefCell<MCI>,           // SDIF hardware controller
+    hc_cfg: RefCell<MCIConfig>, // SDIF configuration
+    #[cfg(feature = "dma")]
+    rw_desc: PoolBuffer, // DMA descriptor pointer, for managing data transfer TODO: Consider using vec or DVec directly
+    desc_num: Cell<u32>,        // Descriptor count, representing the number of DMA descriptors
 }
 
 impl SDIFDev {
     pub fn new(addr: NonNull<u8>, desc_num: usize) -> Self {
-        let align = SD_BLOCK_SIZE;
-        let size = core::mem::size_of::<FSdifIDmaDesc>() * desc_num;
-        let rw_desc = match PoolBuffer::new(size, align) {
-            Err(e) => {
-                panic!("alloc internal buffer failed! err: {:?}", e);
-            }
-            Ok(buffer) => buffer,
-        };
         #[cfg(feature = "dma")]
-        let pa = mmap(rw_desc.addr());
-        #[cfg(not(feature = "dma"))]
-        let pa = 0;
-        debug!(
-            "rw_desc buffer at {:x}, pa {:x}",
-            rw_desc.addr().as_ptr() as usize,
-            pa
-        );
+        {
+            let align = SD_BLOCK_SIZE;
+            let length = core::mem::size_of::<FSdifIDmaDesc>() * desc_num;
+            let rw_desc = match osa_alloc_aligned(length, align) {
+                Err(e) => {
+                    error!("alloc internal buffer failed! err: {:?}", e);
+                    panic!("Failed to allocate internal buffer");
+                }
+                Ok(buffer) => buffer,
+            };
 
+            Self {
+                hc: MCI::new(MCIConfig::new(addr)).into(),
+                hc_cfg: MCIConfig::new(addr).into(),
+                rw_desc,
+                desc_num: (desc_num as u32).into(),
+            }
+        }
+
+        #[cfg(feature = "pio")]
         Self {
             hc: MCI::new(MCIConfig::new(addr)).into(),
             hc_cfg: MCIConfig::new(addr).into(),
-            rw_desc,
             desc_num: (desc_num as u32).into(),
         }
     }
@@ -74,29 +73,14 @@ impl SDIFDev {
     }
 }
 
-/// Auxilary functions
-impl SDIFDev {
-    pub fn whether_transfer_data(&self) -> bool {
-        self.hc
-            .borrow()
-            .cur_cmd()
-            .as_ref()
-            .unwrap()
-            .get_data()
-            .is_some()
-    }
-}
-
-impl SDIFDev {
-    pub fn init(&self, addr: NonNull<u8>, host: &MCIHost) -> MCIHostStatus {
+impl MCIHostDevice for SDIFDev {
+    fn init(&self, addr: NonNull<u8>, host: &MCIHost) -> MCIHostStatus {
         let num_of_desc = host.config.max_trans_size / host.config.def_block_size;
         self.desc_num.set(num_of_desc as u32);
-        self.do_init(addr, host)?;
-        Ok(())
+        self.do_init(addr, host)
     }
 
     fn do_init(&self, addr: NonNull<u8>, host: &MCIHost) -> MCIHostStatus {
-        info!("dev do init");
         let mci_config = MCIConfig::lookup_config(addr);
         let iopad = self
             .hc
@@ -113,45 +97,45 @@ impl SDIFDev {
             .restart()
             .unwrap_or_else(|e| error!("restart failed: {:?}", e));
 
-        if self.hc.borrow_mut().config_init(&mci_config).is_err() {
+        if let Err(_) = self.hc.borrow_mut().config_init(&mci_config) {
             info!("Sdio ctrl init failed.");
             return Err(MCIHostError::Fail);
         }
 
-        if host.config.enable_dma
-            && self
+        if host.config.enable_irq {
+            // TODO
+        }
+
+        #[cfg(feature = "dma")]
+        if host.config.enable_dma {
+            if let Err(_) = self
                 .hc
                 .borrow_mut()
                 .set_idma_list(&self.rw_desc, self.desc_num.get())
-                .is_err()
-        {
-            error!("idma list set failed!");
-            return Err(MCIHostError::Fail);
+            {
+                error!("idma list set failed!");
+                return Err(MCIHostError::Fail);
+            }
         }
 
-        // self.register_event_arg();
         *self.hc_cfg.borrow_mut() = mci_config;
-        info!("do_init ok");
         Ok(())
     }
 
     fn deinit(&self) {
+        // TODO FSDIFHOST_RevokeIrq
         let _ = self.hc.borrow_mut().config_deinit();
         info!("Sdio ctrl deinited !!!")
     }
 
-    pub fn reset(&self) -> MCIHostStatus {
+    fn reset(&self) -> MCIHostStatus {
         match self.hc.borrow_mut().restart() {
             Ok(_) => Ok(()),
             Err(_) => Err(MCIHostError::Fail),
         }
     }
 
-    pub fn switch_to_voltage(
-        &self,
-        voltage: MCIHostOperationVoltage,
-        host: &MCIHost,
-    ) -> MCIHostStatus {
+    fn switch_to_voltage(&self, voltage: MCIHostOperationVoltage, host: &MCIHost) -> MCIHostStatus {
         match voltage {
             MCIHostOperationVoltage::Voltage300V => {
                 host.curr_voltage.set(voltage);
@@ -175,7 +159,7 @@ impl SDIFDev {
         Ok(())
     }
 
-    pub fn execute_tuning(
+    fn execute_tuning(
         &self,
         _tuning_cmd: u32,
         _rev_buf: &mut Vec<u32>,
@@ -184,8 +168,8 @@ impl SDIFDev {
         Ok(())
     }
 
-    fn enable_ddr_mode(&self, enable: bool, _nibble_pos: u32) {
-        self.hc.borrow().set_ddr_mode(enable);
+    fn enable_ddr_mode(&self, _enable: bool, _nibble_pos: u32) {
+        // TODO  Not implemented yet
     }
 
     fn enable_hs400_mode(&self, _enable: bool) {
@@ -200,9 +184,9 @@ impl SDIFDev {
         !self.hc.borrow().check_if_card_busy()
     }
 
-    pub fn convert_data_to_little_endian(
+    fn convert_data_to_little_endian(
         &self,
-        data: &mut [u32],
+        data: &mut Vec<u32>,
         word_size: usize,
         format: MCIHostDataPacketFormat,
         host: &MCIHost,
@@ -210,28 +194,31 @@ impl SDIFDev {
         if host.config.endian_mode == MCIHostEndianMode::Little
             && format == MCIHostDataPacketFormat::MSBFirst
         {
-            for word in data.iter_mut().take(word_size) {
-                *word = word.swap_bytes();
+            for i in 0..word_size {
+                let val = data[i];
+                data[i] = val.swap_bytes();
             }
         } else if host.config.endian_mode == MCIHostEndianMode::HalfWordBig {
-            for word in data.iter_mut().take(word_size) {
-                *word = swap_half_word_byte_sequence_u32(*word);
+            for i in 0..word_size {
+                let val = data[i];
+                data[i] = swap_half_word_byte_sequence_u32(val);
             }
         } else if host.config.endian_mode == MCIHostEndianMode::Big
             && format == MCIHostDataPacketFormat::LSBFirst
         {
-            for word in data.iter_mut().take(word_size) {
-                *word = word.swap_bytes();
+            for i in 0..word_size {
+                let val = data[i];
+                data[i] = val.swap_bytes();
             }
         }
         Ok(())
     }
 
-    pub fn card_detect_init(&self, _cd: &MCIHostCardDetect) -> MCIHostStatus {
+    fn card_detect_init(&self, _cd: &MCIHostCardDetect) -> MCIHostStatus {
         Ok(())
     }
 
-    pub fn card_power_set(&self, _enable: bool) {}
+    fn card_power_set(&self, _enable: bool) {}
 
     fn card_int_enable(&self, enable: bool, host: &MCIHost) -> MCIHostStatus {
         if MCIHostCardType::SDIO == host.config.card_type {
@@ -248,24 +235,24 @@ impl SDIFDev {
         Ok(())
     }
 
-    pub fn card_bus_width_set(&self, data_bus_width: MCIHostBusWdith) {
+    fn card_bus_width_set(&self, data_bus_width: MCIHostBusWdith) {
         match data_bus_width {
             MCIHostBusWdith::Bit1 => {
                 self.hc.borrow().bus_width_set(data_bus_width as u32);
-                warn!("Set bus width to 1 bit");
+                info!("Set bus width to 1 bit");
             }
             MCIHostBusWdith::Bit4 => {
                 self.hc.borrow().bus_width_set(data_bus_width as u32);
-                warn!("Set bus width to 4 bit");
+                info!("Set bus width to 4 bit");
             }
             MCIHostBusWdith::Bit8 => {
                 self.hc.borrow().bus_width_set(data_bus_width as u32);
-                warn!("Set bus width to 8 bit");
+                info!("Set bus width to 8 bit");
             }
         }
     }
 
-    pub fn card_detect_status_polling(
+    fn card_detect_status_polling(
         &self,
         wait_card_status: SDStatus,
         _timeout: u32,
@@ -305,17 +292,17 @@ impl SDIFDev {
         }
     }
 
-    pub fn card_active_send(&self) {}
+    fn card_active_send(&self) {}
 
-    pub fn card_clock_set(&self, target_clock: u32, host: &MCIHost) -> u32 {
-        // 如果当前时钟频率已经是目标频率，则直接返回
+    fn card_clock_set(&self, target_clock: u32, host: &MCIHost) -> u32 {
+        // If current clock frequency is already target frequency, return directly
         if host.curr_clock_freq.get() == target_clock {
             return host.curr_clock_freq.get();
         }
-        // 尝试设置时钟频率
+        // Try to set clock frequency
         if self.hc.borrow_mut().clk_freq_set(target_clock).is_ok() {
             info!("BUS CLOCK: {}", target_clock);
-            // 更新实例的时钟频率
+            // Update instance clock frequency
             host.curr_clock_freq.set(target_clock);
         } else {
             info!("Failed to update clock");
@@ -328,7 +315,7 @@ impl SDIFDev {
         self.hc.borrow().clock_set(enable);
     }
 
-    pub fn card_is_busy(&self) -> bool {
+    fn card_is_busy(&self) -> bool {
         self.hc.borrow().check_if_card_busy()
     }
 
@@ -405,6 +392,8 @@ impl SDIFDev {
             let buf = if let Some(rx_data) = in_data.rx_data_mut() {
                 // Handle receive data
                 flag |= MCICmdFlag::READ_DATA;
+                // TODO The CLONE here will reduce driver speed, need to solve this performance issue - taking it out directly might be better
+                // rx_data.clone()
                 take(rx_data)
             } else if let Some(tx_data) = in_data.tx_data_mut() {
                 // Handle transmit data
@@ -420,22 +409,21 @@ impl SDIFDev {
             out_data.datalen_set(in_data.block_size() as u32 * in_data.block_count());
 
             #[cfg(feature = "dma")]
-            let bus_addr = mmap(NonNull::new(buf.as_ptr() as *mut u8).unwrap().into());
-            #[cfg(feature = "dma")]
-            out_data.buf_dma_set(bus_addr as usize);
-            flush(
-                NonNull::new(buf.as_ptr() as *mut u8).unwrap(),
-                buf.len() * size_of::<u32>(),
-            );
+            {
+                let slice = DSlice::from(&buf[..]);
+                out_data.buf_dma_set(slice.bus_addr() as usize);
+                drop(slice);
+            }
+
+            out_data.buf_set(Some(buf));
+
             #[cfg(feature = "dma")]
             debug!(
-                "in covert command info, buf va {:p}, pa {:x}",
-                buf.as_ptr(),
-                bus_addr
+                "buf PA: 0x{:x}, blksz: {}, datalen: {}",
+                out_data.buf_dma(),
+                out_data.blksz(),
+                out_data.datalen()
             );
-            #[cfg(not(feature = "dma"))]
-            debug!("in covert command info, buf va {:p}", buf.as_ptr(),);
-            out_data.buf_set(Some(buf));
 
             Some(out_data)
         } else {
@@ -456,113 +444,67 @@ impl SDIFDev {
         out_trans
     }
 
-    pub fn transfer_function(
-        &self,
-        content: &mut MCIHostTransfer,
-        host: &MCIHost,
-    ) -> MCIHostStatus {
+    fn transfer_function(&self, content: &mut MCIHostTransfer, host: &MCIHost) -> MCIHostStatus {
         self.pre_command(content, host)?;
+
         let mut cmd_data = self.covert_command_info(content);
-        let is_read_transfer = cmd_data.flag().contains(MCICmdFlag::READ_DATA);
-        let is_write_transfer = cmd_data.flag().contains(MCICmdFlag::WRITE_DATA);
-
-        let transfer_type = match (is_read_transfer, is_write_transfer) {
-            (true, false) => "READ",
-            (false, true) => "WRITE",
-            (true, true) => "READ_WRITE",
-            (false, false) => "NO_DATA",
-        };
-
-        debug!(
-            "SDIF transfer: CMD{}, arg=0x{:08x}, type={}",
-            cmd_data.cmdidx(),
-            cmd_data.cmdarg(),
-            transfer_type
-        );
 
         if host.config.enable_dma {
-            if self.hc.borrow_mut().dma_transfer(&mut cmd_data).is_err() {
+            #[cfg(feature = "dma")]
+            if let Err(_) = self.hc.borrow_mut().dma_transfer(&mut cmd_data) {
                 return Err(MCIHostError::NoData);
             }
-            #[cfg(feature = "poll")]
-            if self
-                .hc
-                .borrow_mut()
-                .poll_wait_dma_end(&mut cmd_data)
-                .is_err()
-            {
+            #[cfg(feature = "dma")]
+            if let Err(_) = self.hc.borrow_mut().poll_wait_dma_end(&mut cmd_data) {
                 return Err(MCIHostError::NoData);
             }
         } else {
-            if self.hc.borrow_mut().pio_transfer(&mut cmd_data).is_err() {
+            #[cfg(feature = "pio")]
+            if let Err(_) = self.hc.borrow_mut().pio_transfer(&mut cmd_data) {
                 return Err(MCIHostError::NoData);
             }
-            #[cfg(feature = "poll")]
-            if self
-                .hc
-                .borrow_mut()
-                .poll_wait_pio_end(&mut cmd_data)
-                .is_err()
-            {
+            #[cfg(feature = "pio")]
+            if let Err(_) = self.hc.borrow_mut().poll_wait_pio_end(&mut cmd_data) {
                 return Err(MCIHostError::NoData);
             }
         }
 
-        #[cfg(feature = "irq")]
-        {
-            use crate::osa::consts::{
-                SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS, SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS,
-            };
-            use crate::osa::{osa_event_clear, osa_event_wait};
+        debug!(
+            "Transfer cmd: {}, arg: 0x{:x}, flag: {:?}",
+            cmd_data.cmdidx(),
+            cmd_data.cmdarg(),
+            cmd_data.flag()
+        );
 
-            let complete_events = if cmd_data.get_data().is_some() {
-                SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS | SDMMC_OSA_EVENT_TRANSFER_DATA_SUCCESS
-            } else {
-                SDMMC_OSA_EVENT_TRANSFER_CMD_SUCCESS
-            };
-
-            if osa_event_wait(complete_events, 500).is_err() {
-                error!("wait command done timeout!");
-                self.hc.borrow().register_dump();
-                return Err(MCIHostError::Timeout);
-            }
-
-            osa_event_clear(complete_events);
-        }
-
-        if self
-            .hc
-            .borrow_mut()
-            .cmd_response_get(&mut cmd_data)
-            .is_err()
-        {
-            error!(
-                "SDIF transfer failed: CMD{}, arg=0x{:08x}, type={}",
-                cmd_data.cmdidx(),
-                cmd_data.cmdarg(),
-                transfer_type
-            );
+        if let Err(_) = self.hc.borrow_mut().cmd_response_get(&mut cmd_data) {
+            info!("Transfer cmd and data failed !!!");
             return Err(MCIHostError::Timeout);
         }
 
-        if content.data().is_some() {
-            let data = cmd_data.get_mut_data().unwrap();
-            invalidate(
-                NonNull::new(data.buf().unwrap().as_ptr() as *mut u8).unwrap(),
-                data.buf().unwrap().len() * 4,
-            );
-            if let Some(rx_data) = data.buf_take()
-                && let Some(in_data) = content.data_mut()
-            {
-                in_data.rx_data_set(Some(rx_data));
+        // TODO: The `CLONE` here will reduce driver speed, need to solve this performance issue - taking it out directly might be better
+        if let Some(_) = content.data() {
+            let data = cmd_data.get_data().unwrap();
+            unsafe {
+                invalidate(
+                    data.buf().unwrap().as_ptr() as *const u8,
+                    data.buf().unwrap().len() * 4,
+                );
+            }
+            if let Some(rx_data) = data.buf() {
+                if let Some(in_data) = content.data_mut() {
+                    in_data.rx_data_set(Some(rx_data.clone()));
+                }
             }
         }
 
-        if let Some(cmd) = content.cmd_mut()
-            && cmd.response_type() != MCIHostResponseType::None
-        {
-            cmd.response_mut().copy_from_slice(cmd_data.get_response());
+        if let Some(cmd) = content.cmd_mut() {
+            if cmd.response_type() != MCIHostResponseType::None {
+                cmd.response_mut()
+                    .copy_from_slice(&cmd_data.get_response()[..4]);
+            }
         }
+
+        trace!("Transfer completed successfully");
 
         Ok(())
     }
