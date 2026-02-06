@@ -31,12 +31,12 @@ use core::str;
 use core::time::Duration;
 use io_voltage::SdIoVoltage;
 
+use crate::mci_host::MCIHost;
 use crate::mci_host::mci_host_config::MCIHostType;
 use crate::mci_host::mci_sdif::sdif_device::SDIFDev;
-use crate::mci_host::MCIHost;
 use crate::osa::{osa_alloc_aligned, osa_init};
 use crate::tools::swap_word_byte_sequence_u32;
-use crate::{sleep, IoPad};
+use crate::{IoPad, sleep};
 
 use super::constants::*;
 use super::err::{MCIHostError, MCIHostStatus};

@@ -9,13 +9,13 @@ use alloc::vec::Vec;
 
 use crate::mci::MCICmdData;
 
+use super::MCIHost;
+use super::MCIHostCardIntFn;
 use super::constants::*;
 use super::err::*;
 use super::mci_host_card_detect::MCIHostCardDetect;
 use super::mci_host_transfer::MCIHostTransfer;
 use super::mci_sdif::constants::SDStatus;
-use super::MCIHost;
-use super::MCIHostCardIntFn;
 
 /// Trait defining MCI host device operations.
 ///

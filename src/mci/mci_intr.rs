@@ -1,6 +1,6 @@
+use super::MCI;
 use super::constants::*;
 use super::regs::*;
-use super::MCI;
 
 impl MCI {
     /* Get SDIF controller interrupt mask */

@@ -149,16 +149,16 @@ pub unsafe fn flush(addr: *const u8, size: usize) {
 #[inline(always)]
 pub unsafe fn invalidate(addr: *const u8, size: usize) {
     const CACHE_LINE_SIZE: usize = 64;
-    
+
     let start_addr = (addr as usize) & !(CACHE_LINE_SIZE - 1);
     let end_addr = (addr as usize + size + CACHE_LINE_SIZE - 1) & !(CACHE_LINE_SIZE - 1);
-    
+
     let mut current_addr = start_addr;
     while current_addr < end_addr {
         asm!("dc ivac, {0}", in(reg) current_addr, options(nostack, preserves_flags));
         current_addr += CACHE_LINE_SIZE;
     }
-    
+
     asm!("dsb sy");
     asm!("isb");
 }

@@ -4,11 +4,11 @@ use log::*;
 
 use crate::sleep;
 
+use super::MCI;
 use super::constants::*;
 use super::err::*;
 use super::mci_cmddata::MCICmdData;
 use super::regs::*;
-use super::MCI;
 
 impl MCI {
     pub(crate) fn private_cmd_send(&self, cmd: MCICmd, arg: u32) -> MCIResult {
@@ -149,9 +149,9 @@ impl MCI {
         }
 
         cmd_data.success_set(true); /* cmd / data transfer finished successful */
-        
+
         sleep(Duration::from_micros(50)); // Allow some time for the command to settle
-        
+
         debug!(
             "============[{}-{}]@0x{:x} end ============",
             {

@@ -15,9 +15,9 @@
 //! - `MMC_66MHZ`: MMC HS200 (66 MHz)
 //! - `MMC_100MHZ`: MMC HS200 (100 MHz)
 
+use crate::iopad::IoPad;
 use crate::iopad::constants::{FioPadDelay, FioPadDelayDir, FioPadDelayType};
 use crate::iopad::regs::{Aj49Reg1, J53Reg1, XReg1};
-use crate::iopad::IoPad;
 use crate::regs::BitsOps;
 
 use super::constants::*;

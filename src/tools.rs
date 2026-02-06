@@ -49,8 +49,6 @@ pub fn realign_vec(input: Vec<u32>, align: usize) -> Result<Vec<u32>, &'static s
         raw_ptr as *mut u32
     };
 
-    
-
     debug_assert_eq!(
         aligned_ptr as usize & (align - 1),
         0,

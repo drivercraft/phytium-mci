@@ -51,7 +51,7 @@ pub use mci_cmddata::*;
 pub use mci_config::*;
 pub use mci_timing::*;
 
-use crate::{osa::pool_buffer::PoolBuffer, regs::*, sleep, IoPad};
+use crate::{IoPad, osa::pool_buffer::PoolBuffer, regs::*, sleep};
 use core::time::Duration;
 
 /// MCI (Memory Card Interface) controller driver.

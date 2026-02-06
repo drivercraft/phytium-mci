@@ -2,7 +2,7 @@
 //!
 //! Provides [`PoolBuffer`] - a safe wrapper around pooled memory
 use core::{
-    ptr::{copy_nonoverlapping, write_bytes, NonNull},
+    ptr::{NonNull, copy_nonoverlapping, write_bytes},
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 

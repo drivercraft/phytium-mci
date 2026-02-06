@@ -1,8 +1,8 @@
+use super::MCI;
 use super::constants::*;
 use super::err::*;
 use super::mci_data::MCIData;
 use super::regs::*;
-use super::MCI;
 use log::*;
 
 impl MCI {

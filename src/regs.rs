@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use crate::sleep;
-use bitflags::{bitflags, Flags};
+use bitflags::{Flags, bitflags};
 use core::{marker::PhantomData, ops, ptr::NonNull, time::Duration};
 use log::info;
 

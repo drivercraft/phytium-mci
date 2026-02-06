@@ -8,12 +8,13 @@ use alloc::vec::Vec;
 use dma_api::DSlice;
 use log::*;
 
-use super::constants::SDStatus;
 use super::MCIHost;
+use super::constants::SDStatus;
 use crate::mci::constants::*;
 use crate::mci::mci_data::MCIData;
 use crate::mci::regs::MCIIntMask;
-use crate::mci::{MCICmdData, MCIConfig, MCI};
+use crate::mci::{MCI, MCICmdData, MCIConfig};
+use crate::mci_host::MCIHostCardIntFn;
 use crate::mci_host::constants::*;
 use crate::mci_host::err::*;
 use crate::mci_host::mci_host_card_detect::MCIHostCardDetect;
@@ -21,12 +22,11 @@ use crate::mci_host::mci_host_config::*;
 use crate::mci_host::mci_host_device::MCIHostDevice;
 use crate::mci_host::mci_host_transfer::MCIHostTransfer;
 use crate::mci_host::sd::constants::SdCmd;
-use crate::mci_host::MCIHostCardIntFn;
 use crate::osa::osa_alloc_aligned;
 use crate::osa::pool_buffer::PoolBuffer;
 use crate::sd::constants::SD_BLOCK_SIZE;
 use crate::tools::swap_half_word_byte_sequence_u32;
-use crate::{sleep, IoPad};
+use crate::{IoPad, sleep};
 
 #[cfg(feature = "dma")]
 use crate::mci::mci_dma::FSdifIDmaDesc;
@@ -36,7 +36,7 @@ pub(crate) struct SDIFDev {
     hc_cfg: RefCell<MCIConfig>, // SDIF configuration
     #[cfg(feature = "dma")]
     rw_desc: PoolBuffer, // DMA descriptor pointer, for managing data transfer TODO: Consider using vec or DVec directly
-    desc_num: Cell<u32>,        // Descriptor count, representing the number of DMA descriptors
+    desc_num: Cell<u32>, // Descriptor count, representing the number of DMA descriptors
 }
 
 impl SDIFDev {
